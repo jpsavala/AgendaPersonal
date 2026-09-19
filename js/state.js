@@ -13,8 +13,6 @@ window.Agenda = window.Agenda || {};
   const { toISO } = ns.dateUtils;
   const QUOTES = ns.quotes.QUOTES;
 
-  const HOURS = Array.from({ length: 20 }, (_, i) => ns.dateUtils.pad2(i + 4)); // 04..23
-
   let data = storage.load();
   const listeners = [];
 
@@ -84,21 +82,47 @@ window.Agenda = window.Agenda || {};
 
   // ---------- Días ----------
   function defaultDay() {
-    const hours = {};
-    HOURS.forEach((h) => (hours[h] = ""));
-    return { hours, habits: {}, priorities: [] };
+    return { cocina: true, blocks: {}, habits: {}, priorities: [] };
   }
 
   function getDay(dateStr) {
     if (!data.days[dateStr]) {
       data.days[dateStr] = defaultDay();
     }
-    return data.days[dateStr];
+    const day = data.days[dateStr];
+    // Compatibilidad con días guardados antes del rediseño del horario.
+    if (typeof day.cocina !== "boolean") day.cocina = true;
+    if (!day.blocks) day.blocks = {};
+    delete day.hours;
+    return day;
   }
 
-  function setHourText(dateStr, hour, text) {
-    getDay(dateStr).hours[hour] = text;
+  function getDayBlocks(dateStr) {
+    const day = getDay(dateStr);
+    return ns.scheduleDefs.getBlocks(day.cocina).map((def) => ({
+      ...def,
+      text: (day.blocks[def.id] && day.blocks[def.id].text) || "",
+      done: !!(day.blocks[def.id] && day.blocks[def.id].done),
+    }));
+  }
+
+  function setDayCocina(dateStr, cocina) {
+    getDay(dateStr).cocina = !!cocina;
+    notify();
+  }
+
+  function setBlockText(dateStr, blockId, text) {
+    const day = getDay(dateStr);
+    if (!day.blocks[blockId]) day.blocks[blockId] = { text: "", done: false };
+    day.blocks[blockId].text = text;
     persist();
+  }
+
+  function toggleBlockDone(dateStr, blockId) {
+    const day = getDay(dateStr);
+    if (!day.blocks[blockId]) day.blocks[blockId] = { text: "", done: false };
+    day.blocks[blockId].done = !day.blocks[blockId].done;
+    notify();
   }
 
   function toggleDayHabit(dateStr, habitId) {
@@ -204,13 +228,15 @@ window.Agenda = window.Agenda || {};
   }
 
   ns.state = {
-    HOURS,
     getHabitsDefs,
     addHabit,
     removeHabit,
     getQuoteForDay,
     getDay,
-    setHourText,
+    getDayBlocks,
+    setDayCocina,
+    setBlockText,
+    toggleBlockDone,
     toggleDayHabit,
     addPriority,
     removePriority,

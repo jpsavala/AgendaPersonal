@@ -51,22 +51,67 @@ window.Agenda = window.Agenda || {};
       el("p", { class: "quote-text" }, `“${state.getQuoteForDay(dateStr)}”`)
     );
 
-    // Línea de tiempo
-    const timeline = el("div", { class: "timeline" });
-    state.HOURS.forEach((hour) => {
-      const row = el(
-        "div",
-        { class: "timeline-row" },
-        el("span", { class: "timeline-hour" }, `${hour}:00`),
-        el("input", {
-          type: "text",
-          class: "timeline-input",
-          placeholder: "¿Qué vas a hacer?",
-          value: day.hours[hour] || "",
-          oninput: (e) => state.setHourText(dateStr, hour, e.target.value),
-        })
+    // Toggle "día que cocino" / "día que no cocino"
+    const cookToggle = el(
+      "div",
+      { class: "toggle-group" },
+      el(
+        "button",
+        {
+          class: "toggle-btn" + (day.cocina ? " active" : ""),
+          onclick: () => state.setDayCocina(dateStr, true),
+        },
+        "Día que cocino"
+      ),
+      el(
+        "button",
+        {
+          class: "toggle-btn" + (!day.cocina ? " active" : ""),
+          onclick: () => state.setDayCocina(dateStr, false),
+        },
+        "Día que no cocino"
+      )
+    );
+
+    // Horario del día (bloques de duración variable)
+    const timeline = el("div", { class: "schedule" });
+    state.getDayBlocks(dateStr).forEach((block) => {
+      if (block.marker) {
+        timeline.appendChild(
+          el(
+            "div",
+            { class: "schedule-marker" },
+            el("span", { class: "schedule-marker-time" }, block.time),
+            el("span", { class: "schedule-marker-label" }, block.label)
+          )
+        );
+        return;
+      }
+      timeline.appendChild(
+        el(
+          "div",
+          { class: "schedule-block" + (block.highlight ? " highlight" : "") },
+          el(
+            "div",
+            { class: "schedule-block-head" },
+            el("span", { class: "schedule-time" }, block.time),
+            el("span", { class: "schedule-label" }, block.label),
+            el("input", {
+              type: "checkbox",
+              class: "schedule-check",
+              checked: block.done ? "checked" : null,
+              onchange: () => state.toggleBlockDone(dateStr, block.id),
+            }),
+          ),
+          el("input", {
+            type: "text",
+            class: "schedule-input",
+            placeholder: "¿Qué vas a hacer en este bloque?",
+            value: block.text,
+            oninput: (e) => state.setBlockText(dateStr, block.id, e.target.value),
+          })
+        )
       );
-      timeline.appendChild(row);
     });
 
     // Hábitos
@@ -121,7 +166,7 @@ window.Agenda = window.Agenda || {};
 
     const grid = el("div", { class: "daily-grid" }, habitsSection, prioritiesSection);
 
-    container.append(header, subtitle, quoteBox, timeline, grid);
+    container.append(header, subtitle, quoteBox, cookToggle, timeline, grid);
   }
 
   function addRow(placeholder, onAdd) {
