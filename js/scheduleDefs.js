@@ -21,7 +21,7 @@ window.Agenda = window.Agenda || {};
   ];
 
   const COOK_MIDDAY = [
-    { id: "preparar_comida", time: "14:00–15:00", label: "Preparar comida" },
+    { id: "preparar_comida", time: "14:00–15:00", label: "Comida" },
     {
       id: "comer_personal",
       time: "15:00–16:00",
