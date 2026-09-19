@@ -34,7 +34,17 @@ window.Agenda = window.Agenda || {};
       el("button", {
         class: "btn-secondary",
         onclick: () => { currentMonday = dateUtils.getMonday(new Date()); render(container); },
-      }, "Esta semana")
+      }, "Esta semana"),
+      el("button", {
+        class: "btn-secondary",
+        onclick: () => {
+          if (state.weekHasAnyBlockText(mondayStr)) {
+            const confirmed = confirm("Esto va a reemplazar lo que ya tienes capturado en esta semana, ¿continuar?");
+            if (!confirmed) return;
+          }
+          state.replicatePreviousWeek(mondayStr);
+        },
+      }, "Replicar semana anterior")
     );
 
     const daysGrid = el("div", { class: "week-days-grid" });

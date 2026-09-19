@@ -25,20 +25,32 @@ window.Agenda = window.Agenda || {};
     return ns.dateUtils.DAY_KEYS[ns.dateUtils.isoWeekday(date)];
   }
 
-  function getWeekdayTemplate(dayKey) {
-    if (!data.weekdayTemplates) data.weekdayTemplates = {};
-    if (!data.weekdayTemplates[dayKey]) data.weekdayTemplates[dayKey] = {};
-    return data.weekdayTemplates[dayKey];
+  function getMondayKey(dateStr) {
+    return ns.dateUtils.toISO(ns.dateUtils.getMonday(ns.dateUtils.fromISO(dateStr)));
+  }
+
+  // El texto de los bloques vive por SEMANA ESPECÍFICA (identificada por
+  // el lunes de esa semana) + día de la semana. Cada semana nueva
+  // arranca vacía: no hereda nada de otras semanas por default.
+  function getWeekBlockTemplate(mondayStr, dayKey) {
+    if (!data.weekBlocks) data.weekBlocks = {};
+    if (!data.weekBlocks[mondayStr]) data.weekBlocks[mondayStr] = {};
+    if (!data.weekBlocks[mondayStr][dayKey]) data.weekBlocks[mondayStr][dayKey] = {};
+    return data.weekBlocks[mondayStr][dayKey];
   }
 
   // Migra el modelo viejo (texto duplicado por fecha en la vista diaria
-  // y por semana específica en la vista semanal) a una sola plantilla de
-  // texto por día de la semana. Es segura de correr en cada carga: una
-  // vez migrado un dato, se elimina de su lugar viejo, así que no vuelve
-  // a aplicarse en la siguiente carga. Las casillas de cumplido (blocks
-  // .done, hábitos, prioridades) nunca se tocan aquí.
+  // y por semana específica en la vista semanal, versión anterior) a una
+  // sola plantilla de texto por día de la semana GLOBAL. Es segura de
+  // correr en cada carga: una vez migrado un dato, se elimina de su
+  // lugar viejo, así que no vuelve a aplicarse en la siguiente carga.
+  // Las casillas de cumplido (blocks.done, hábitos, prioridades) nunca
+  // se tocan aquí.
   function migrateToWeekdayTemplates() {
-    ns.dateUtils.DAY_KEYS.forEach((k) => getWeekdayTemplate(k));
+    if (!data.weekdayTemplates) data.weekdayTemplates = {};
+    ns.dateUtils.DAY_KEYS.forEach((k) => {
+      if (!data.weekdayTemplates[k]) data.weekdayTemplates[k] = {};
+    });
 
     const fieldToBlockIds = {
       manana: ["meditar"],
@@ -63,7 +75,7 @@ window.Agenda = window.Agenda || {};
             if (!text) return;
             const targets = fieldToBlockIds[field];
             if (!targets) return;
-            const template = getWeekdayTemplate(dayKey);
+            const template = data.weekdayTemplates[dayKey];
             targets.forEach((blockId) => {
               if (!template[blockId]) template[blockId] = text;
             });
@@ -78,7 +90,7 @@ window.Agenda = window.Agenda || {};
       .forEach((dateStr) => {
         const day = data.days[dateStr];
         if (!day || !day.blocks) return;
-        const template = getWeekdayTemplate(getWeekdayKey(dateStr));
+        const template = data.weekdayTemplates[getWeekdayKey(dateStr)];
         Object.entries(day.blocks).forEach(([blockId, val]) => {
           if (val && val.text) {
             if (!template[blockId]) template[blockId] = val.text;
@@ -88,17 +100,40 @@ window.Agenda = window.Agenda || {};
       });
   }
 
+  // El texto por día de la semana GLOBAL (versión anterior) se convierte
+  // en contenido inicial de la semana activa al momento de esta
+  // migración, para no perder lo ya capturado. El resto de las semanas
+  // (pasadas o futuras) arrancan vacías, como corresponde al nuevo
+  // modelo por semana específica.
+  function migrateWeekdayTemplatesToCurrentWeek() {
+    if (!data.weekdayTemplates) return;
+    const currentMonday = ns.dateUtils.toISO(ns.dateUtils.getMonday(new Date()));
+    ns.dateUtils.DAY_KEYS.forEach((dayKey) => {
+      const oldTemplate = data.weekdayTemplates[dayKey];
+      if (!oldTemplate) return;
+      Object.entries(oldTemplate).forEach(([blockId, text]) => {
+        if (!text) return;
+        const weekTemplate = getWeekBlockTemplate(currentMonday, dayKey);
+        if (!weekTemplate[blockId]) weekTemplate[blockId] = text;
+      });
+    });
+    delete data.weekdayTemplates;
+  }
+
   // Bloques que pasaron a ser fijos ("Oficina", sin texto libre): se
-  // descarta cualquier texto que hubiera quedado guardado para ellos.
+  // descarta cualquier texto que hubiera quedado guardado para ellos,
+  // en cualquier semana.
   function purgeFixedBlockText() {
     const FIXED_BLOCK_IDS = ["oficina_manana", "tarde_oficina", "tarde_personal"];
-    ns.dateUtils.DAY_KEYS.forEach((dayKey) => {
-      const template = getWeekdayTemplate(dayKey);
-      FIXED_BLOCK_IDS.forEach((blockId) => delete template[blockId]);
+    Object.values(data.weekBlocks || {}).forEach((week) => {
+      Object.values(week).forEach((dayFields) => {
+        FIXED_BLOCK_IDS.forEach((blockId) => delete dayFields[blockId]);
+      });
     });
   }
 
   migrateToWeekdayTemplates();
+  migrateWeekdayTemplatesToCurrentWeek();
   purgeFixedBlockText();
   persist();
 
@@ -210,7 +245,7 @@ window.Agenda = window.Agenda || {};
   }
 
   function getBlockText(dateStr, blockId) {
-    return getWeekdayTemplate(getWeekdayKey(dateStr))[blockId] || "";
+    return getWeekBlockTemplate(getMondayKey(dateStr), getWeekdayKey(dateStr))[blockId] || "";
   }
 
   function getDayBlocks(dateStr) {
@@ -252,13 +287,31 @@ window.Agenda = window.Agenda || {};
     notify();
   }
 
-  // El texto se guarda en la plantilla del día de la semana (Lunes,
-  // Martes, ...) correspondiente a esta fecha, no en la fecha misma:
-  // así se edita una sola vez y se ve igual en la vista diaria y en la
-  // semanal para cualquier fecha con ese mismo día de la semana.
+  // El texto se guarda en la plantilla de ESA semana específica + día de
+  // la semana correspondiente a esta fecha: se edita una sola vez y se
+  // ve igual en la vista diaria y en la semanal para cualquier fecha con
+  // ese mismo día dentro de esa misma semana, pero no se comparte con
+  // otras semanas.
   function setBlockText(dateStr, blockId, text) {
-    getWeekdayTemplate(getWeekdayKey(dateStr))[blockId] = text;
+    getWeekBlockTemplate(getMondayKey(dateStr), getWeekdayKey(dateStr))[blockId] = text;
     persist();
+  }
+
+  // Copia el texto de todos los bloques de la semana inmediata anterior
+  // hacia la semana indicada. Es una copia única: desde este momento las
+  // dos semanas quedan completamente independientes.
+  function weekHasAnyBlockText(mondayStr) {
+    const week = data.weekBlocks && data.weekBlocks[mondayStr];
+    if (!week) return false;
+    return Object.values(week).some((dayFields) => Object.values(dayFields || {}).some((text) => !!text));
+  }
+
+  function replicatePreviousWeek(mondayStr) {
+    const prevMondayStr = ns.dateUtils.toISO(ns.dateUtils.addDays(ns.dateUtils.fromISO(mondayStr), -7));
+    const prevWeek = (data.weekBlocks && data.weekBlocks[prevMondayStr]) || {};
+    if (!data.weekBlocks) data.weekBlocks = {};
+    data.weekBlocks[mondayStr] = JSON.parse(JSON.stringify(prevWeek));
+    notify();
   }
 
   function toggleBlockDone(dateStr, blockId) {
@@ -363,6 +416,8 @@ window.Agenda = window.Agenda || {};
     getBlockText,
     setDayCocina,
     setBlockText,
+    weekHasAnyBlockText,
+    replicatePreviousWeek,
     toggleBlockDone,
     getWeekendChecklist,
     addWeekendItem,

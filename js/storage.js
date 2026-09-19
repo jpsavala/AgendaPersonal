@@ -15,7 +15,7 @@ window.Agenda = window.Agenda || {};
       ],
       days: {},
       weeks: {},
-      weekdayTemplates: {},
+      weekBlocks: {},
       events: {},
       quoteBag: { order: [], pointer: 0 },
     };
