@@ -4,16 +4,6 @@ window.Agenda = window.Agenda || {};
   let currentMonday = dateUtils.getMonday(new Date());
   let containerRef = null;
 
-  const BLOCK_LABELS = {
-    manana: "Rutina de la mañana (café / meditación / lectura)",
-    gimnasio: "Gimnasio",
-    oficina: "Oficina",
-    comida: "Comida",
-    tarde: "Bloque de tarde",
-    diplomado: "Diplomado",
-    corrida: "Actividad de corrida",
-  };
-
   function el(tag, attrs, ...children) {
     const node = document.createElement(tag);
     Object.entries(attrs || {}).forEach(([k, v]) => {
@@ -49,22 +39,36 @@ window.Agenda = window.Agenda || {};
 
     const daysGrid = el("div", { class: "week-days-grid" });
     days.forEach((date, i) => {
-      const dayKey = dateUtils.DAY_KEYS[i];
       const isWeekend = i >= 5;
-      const fields = isWeekend ? state.WEEKEND_BLOCKS : state.WEEKDAY_BLOCKS;
+      const dateStrForDay = dateUtils.toISO(date);
       const dayCard = el(
         "div",
         { class: "card week-day-card" + (isWeekend ? " weekend" : "") },
         el("h4", null, `${dateUtils.DAY_LABELS_LONG[i]} ${date.getDate()}`)
       );
-      fields.forEach((field) => {
-        dayCard.appendChild(el("label", { class: "field-label" }, BLOCK_LABELS[field] || field));
+      // Mismos bloques que la vista diaria: el texto es la plantilla de
+      // este día de la semana, así que editarlo aquí también lo cambia
+      // en la vista diaria (y viceversa). El toggle "día que cocino" es
+      // el que ya tenga guardado esta fecha específica.
+      state.getDayBlocks(dateStrForDay).forEach((block) => {
+        if (block.marker) {
+          dayCard.appendChild(
+            el(
+              "div",
+              { class: "schedule-marker" },
+              el("span", { class: "schedule-marker-time" }, block.time),
+              el("span", { class: "schedule-marker-label" }, block.label)
+            )
+          );
+          return;
+        }
+        dayCard.appendChild(el("label", { class: "field-label" }, `${block.time} — ${block.label}`));
         dayCard.appendChild(
           el("textarea", {
             class: "block-textarea",
             rows: "2",
-            oninput: (e) => state.setWeekBlock(mondayStr, dayKey, field, e.target.value),
-          }, week.blocks[dayKey] ? week.blocks[dayKey][field] || "" : "")
+            oninput: (e) => state.setBlockText(dateStrForDay, block.id, e.target.value),
+          }, block.text)
         );
       });
       daysGrid.appendChild(dayCard);

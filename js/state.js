@@ -20,6 +20,77 @@ window.Agenda = window.Agenda || {};
     storage.save(data);
   }
 
+  function getWeekdayKey(dateStr) {
+    const date = ns.dateUtils.fromISO(dateStr);
+    return ns.dateUtils.DAY_KEYS[ns.dateUtils.isoWeekday(date)];
+  }
+
+  function getWeekdayTemplate(dayKey) {
+    if (!data.weekdayTemplates) data.weekdayTemplates = {};
+    if (!data.weekdayTemplates[dayKey]) data.weekdayTemplates[dayKey] = {};
+    return data.weekdayTemplates[dayKey];
+  }
+
+  // Migra el modelo viejo (texto duplicado por fecha en la vista diaria
+  // y por semana específica en la vista semanal) a una sola plantilla de
+  // texto por día de la semana. Es segura de correr en cada carga: una
+  // vez migrado un dato, se elimina de su lugar viejo, así que no vuelve
+  // a aplicarse en la siguiente carga. Las casillas de cumplido (blocks
+  // .done, hábitos, prioridades) nunca se tocan aquí.
+  function migrateToWeekdayTemplates() {
+    ns.dateUtils.DAY_KEYS.forEach((k) => getWeekdayTemplate(k));
+
+    const fieldToBlockIds = {
+      manana: ["meditar"],
+      gimnasio: ["gimnasio"],
+      oficina: ["oficina_manana", "tarde_oficina"],
+      comida: ["comer_personal", "comer_sobras"],
+      tarde: ["tarde_personal", "tarde_oficina"],
+      diplomado: ["meditar"],
+      corrida: ["correr"],
+    };
+
+    // 1) La vista semanal (modelo viejo) es la plantilla base.
+    Object.keys(data.weeks || {})
+      .sort()
+      .forEach((mondayStr) => {
+        const week = data.weeks[mondayStr];
+        if (!week || !week.blocks) return;
+        ns.dateUtils.DAY_KEYS.forEach((dayKey) => {
+          const fields = week.blocks[dayKey];
+          if (!fields) return;
+          Object.entries(fields).forEach(([field, text]) => {
+            if (!text) return;
+            const targets = fieldToBlockIds[field];
+            if (!targets) return;
+            const template = getWeekdayTemplate(dayKey);
+            targets.forEach((blockId) => {
+              if (!template[blockId]) template[blockId] = text;
+            });
+          });
+        });
+        delete week.blocks;
+      });
+
+    // 2) Rellena huecos con lo que ya hubiera en la vista diaria (mismo id de bloque).
+    Object.keys(data.days || {})
+      .sort()
+      .forEach((dateStr) => {
+        const day = data.days[dateStr];
+        if (!day || !day.blocks) return;
+        const template = getWeekdayTemplate(getWeekdayKey(dateStr));
+        Object.entries(day.blocks).forEach(([blockId, val]) => {
+          if (val && val.text) {
+            if (!template[blockId]) template[blockId] = val.text;
+            delete val.text;
+          }
+        });
+      });
+  }
+
+  migrateToWeekdayTemplates();
+  persist();
+
   function onChange(fn) {
     listeners.push(fn);
   }
@@ -97,11 +168,15 @@ window.Agenda = window.Agenda || {};
     return day;
   }
 
+  function getBlockText(dateStr, blockId) {
+    return getWeekdayTemplate(getWeekdayKey(dateStr))[blockId] || "";
+  }
+
   function getDayBlocks(dateStr) {
     const day = getDay(dateStr);
     return ns.scheduleDefs.getBlocks(day.cocina).map((def) => ({
       ...def,
-      text: (day.blocks[def.id] && day.blocks[def.id].text) || "",
+      text: def.marker ? "" : getBlockText(dateStr, def.id),
       done: !!(day.blocks[def.id] && day.blocks[def.id].done),
     }));
   }
@@ -111,10 +186,12 @@ window.Agenda = window.Agenda || {};
     notify();
   }
 
+  // El texto se guarda en la plantilla del día de la semana (Lunes,
+  // Martes, ...) correspondiente a esta fecha, no en la fecha misma:
+  // así se edita una sola vez y se ve igual en la vista diaria y en la
+  // semanal para cualquier fecha con ese mismo día de la semana.
   function setBlockText(dateStr, blockId, text) {
-    const day = getDay(dateStr);
-    if (!day.blocks[blockId]) day.blocks[blockId] = { text: "", done: false };
-    day.blocks[blockId].text = text;
+    getWeekdayTemplate(getWeekdayKey(dateStr))[blockId] = text;
     persist();
   }
 
@@ -152,18 +229,8 @@ window.Agenda = window.Agenda || {};
   }
 
   // ---------- Semanas ----------
-  const WEEKDAY_BLOCKS = ["manana", "gimnasio", "oficina", "comida", "tarde"];
-  const WEEKEND_BLOCKS = ["manana", "diplomado", "corrida"];
-
   function defaultWeek() {
-    const blocks = {};
-    ns.dateUtils.DAY_KEYS.forEach((key, i) => {
-      const fields = i >= 5 ? WEEKEND_BLOCKS : WEEKDAY_BLOCKS;
-      blocks[key] = {};
-      fields.forEach((f) => (blocks[key][f] = ""));
-    });
     return {
-      blocks,
       metaSemana: "",
       habits: {},
       revisionViernes: { cumplido: "", ajuste: "" },
@@ -175,13 +242,6 @@ window.Agenda = window.Agenda || {};
       data.weeks[mondayStr] = defaultWeek();
     }
     return data.weeks[mondayStr];
-  }
-
-  function setWeekBlock(mondayStr, dayKey, field, text) {
-    const week = getWeek(mondayStr);
-    if (!week.blocks[dayKey]) week.blocks[dayKey] = {};
-    week.blocks[dayKey][field] = text;
-    persist();
   }
 
   function setWeekMeta(mondayStr, text) {
@@ -234,6 +294,7 @@ window.Agenda = window.Agenda || {};
     getQuoteForDay,
     getDay,
     getDayBlocks,
+    getBlockText,
     setDayCocina,
     setBlockText,
     toggleBlockDone,
@@ -242,7 +303,6 @@ window.Agenda = window.Agenda || {};
     removePriority,
     togglePriority,
     getWeek,
-    setWeekBlock,
     setWeekMeta,
     toggleWeekHabit,
     setRevisionViernes,
@@ -251,7 +311,5 @@ window.Agenda = window.Agenda || {};
     removeEvent,
     dayHasIndicator,
     onChange,
-    WEEKDAY_BLOCKS,
-    WEEKEND_BLOCKS,
   };
 })(window.Agenda);
