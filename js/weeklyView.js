@@ -62,6 +62,12 @@ window.Agenda = window.Agenda || {};
           );
           return;
         }
+        if (block.fixed) {
+          dayCard.appendChild(
+            el("p", { class: "schedule-fixed-note" }, `${block.time} — ${block.label}`)
+          );
+          return;
+        }
         dayCard.appendChild(el("label", { class: "field-label" }, `${block.time} — ${block.label}`));
         dayCard.appendChild(
           el("textarea", {

@@ -379,6 +379,13 @@ h2, h3, h4 {
   margin: 0.5rem 0 0.2rem;
 }
 
+.schedule-fixed-note {
+  margin: 0.5rem 0 0.2rem;
+  font-size: 0.82rem;
+  color: var(--muted);
+  font-style: italic;
+}
+
 .block-textarea {
   width: 100%;
   border: 1px solid var(--border);

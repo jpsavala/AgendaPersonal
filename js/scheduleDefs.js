@@ -1,9 +1,10 @@
 /*
  * Definición fija de los bloques de la vista diaria (horarios de
- * duración variable, no una cuadrícula de horas). Los bloques 5 y 7
- * cambian de contenido según el toggle "día que cocino" / "día que
- * no cocino"; cada variante guarda su propio texto para no perder
- * información al alternar el toggle en el mismo día.
+ * duración variable, no una cuadrícula de horas). Solo el bloque de
+ * comida (14:00–16:00 aprox.) cambia de contenido según el toggle
+ * "día que cocino" / "día que no cocino". Los bloques marcados con
+ * `fixed: true` son siempre "Oficina": no tienen texto editable, solo
+ * su casilla de cumplido.
  */
 window.Agenda = window.Agenda || {};
 (function (ns) {
@@ -16,7 +17,7 @@ window.Agenda = window.Agenda || {};
       label: "Bloque libre / paradas antes de oficina",
       highlight: true,
     },
-    { id: "oficina_manana", time: "10:00–14:00", label: "Oficina" },
+    { id: "oficina_manana", time: "10:00–14:00", label: "Oficina", fixed: true },
   ];
 
   const COOK_MIDDAY = [
@@ -34,8 +35,7 @@ window.Agenda = window.Agenda || {};
 
   const MARKER = { id: "salida_oficina", time: "16:10", label: "Salir a la oficina", marker: true };
 
-  const AFTERNOON_COOK = { id: "tarde_personal", time: "16:30–19:00", label: "Trabajo en cosas personales" };
-  const AFTERNOON_NO_COOK = { id: "tarde_oficina", time: "16:30–19:00", label: "Oficina" };
+  const AFTERNOON_FIXED = { id: "tarde_oficina", time: "16:30–19:00", label: "Oficina", fixed: true };
 
   const FIXED_END = [
     { id: "correr", time: "Después de 19:00", label: "Correr" },
@@ -48,8 +48,7 @@ window.Agenda = window.Agenda || {};
 
   function getBlocks(cocina) {
     const midday = cocina ? COOK_MIDDAY : NO_COOK_MIDDAY;
-    const afternoon = cocina ? AFTERNOON_COOK : AFTERNOON_NO_COOK;
-    return [...FIXED_START, ...midday, MARKER, afternoon, ...FIXED_END];
+    return [...FIXED_START, ...midday, MARKER, AFTERNOON_FIXED, ...FIXED_END];
   }
 
   ns.scheduleDefs = { getBlocks };

@@ -103,13 +103,15 @@ window.Agenda = window.Agenda || {};
               onchange: () => state.toggleBlockDone(dateStr, block.id),
             }),
           ),
-          el("input", {
-            type: "text",
-            class: "schedule-input",
-            placeholder: "¿Qué vas a hacer en este bloque?",
-            value: block.text,
-            oninput: (e) => state.setBlockText(dateStr, block.id, e.target.value),
-          })
+          block.fixed
+            ? null
+            : el("input", {
+                type: "text",
+                class: "schedule-input",
+                placeholder: "¿Qué vas a hacer en este bloque?",
+                value: block.text,
+                oninput: (e) => state.setBlockText(dateStr, block.id, e.target.value),
+              })
         )
       );
     });

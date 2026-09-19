@@ -88,7 +88,18 @@ window.Agenda = window.Agenda || {};
       });
   }
 
+  // Bloques que pasaron a ser fijos ("Oficina", sin texto libre): se
+  // descarta cualquier texto que hubiera quedado guardado para ellos.
+  function purgeFixedBlockText() {
+    const FIXED_BLOCK_IDS = ["oficina_manana", "tarde_oficina", "tarde_personal"];
+    ns.dateUtils.DAY_KEYS.forEach((dayKey) => {
+      const template = getWeekdayTemplate(dayKey);
+      FIXED_BLOCK_IDS.forEach((blockId) => delete template[blockId]);
+    });
+  }
+
   migrateToWeekdayTemplates();
+  purgeFixedBlockText();
   persist();
 
   function onChange(fn) {
@@ -176,7 +187,7 @@ window.Agenda = window.Agenda || {};
     const day = getDay(dateStr);
     return ns.scheduleDefs.getBlocks(day.cocina).map((def) => ({
       ...def,
-      text: def.marker ? "" : getBlockText(dateStr, def.id),
+      text: def.marker || def.fixed ? "" : getBlockText(dateStr, def.id),
       done: !!(day.blocks[def.id] && day.blocks[def.id].done),
     }));
   }
