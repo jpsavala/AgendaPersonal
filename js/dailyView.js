@@ -17,6 +17,27 @@ window.Agenda = window.Agenda || {};
     return node;
   }
 
+  function buildOfficePendientesList(dateStr) {
+    const items = state.getOfficeMorningPendientes(dateStr);
+    if (!items.length) return null;
+    const list = el("div", { class: "office-pendientes-list" });
+    items.forEach((item) => {
+      list.appendChild(
+        el(
+          "label",
+          { class: "check-row" + (item.done ? " done" : "") },
+          el("input", {
+            type: "checkbox",
+            checked: item.done ? "checked" : null,
+            onchange: () => state.toggleOfficePendiente(dateStr, item.id),
+          }),
+          el("span", null, item.text)
+        )
+      );
+    });
+    return list;
+  }
+
   function render(container) {
     const dateStr = dateUtils.toISO(currentDate);
     const day = state.getDay(dateStr);
@@ -114,7 +135,8 @@ window.Agenda = window.Agenda || {};
                 placeholder: "¿Qué vas a hacer en este bloque?",
                 value: block.text,
                 oninput: (e) => state.setBlockText(dateStr, block.id, e.target.value),
-              })
+              }),
+          block.id === "oficina_manana" ? buildOfficePendientesList(dateStr) : null
         )
       );
     });

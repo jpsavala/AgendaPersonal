@@ -75,6 +75,22 @@ window.Agenda = window.Agenda || {};
         const blockTitle = block.time ? `${block.time} — ${block.label}` : block.label;
         if (block.fixed) {
           dayCard.appendChild(el("p", { class: "schedule-fixed-note" }, blockTitle));
+          if (block.id === "oficina_manana") {
+            state.getOfficeMorningPendientes(dateStrForDay).forEach((item) => {
+              dayCard.appendChild(
+                el(
+                  "label",
+                  { class: "check-row" + (item.done ? " done" : "") },
+                  el("input", {
+                    type: "checkbox",
+                    checked: item.done ? "checked" : null,
+                    onchange: () => state.toggleWeekTrabajoPendiente(mondayStr, item.id),
+                  }),
+                  el("span", null, item.text)
+                )
+              );
+            });
+          }
           return;
         }
         dayCard.appendChild(el("label", { class: "field-label" }, blockTitle));
@@ -150,7 +166,71 @@ window.Agenda = window.Agenda || {};
       }, week.revisionViernes.ajuste || "")
     );
 
-    container.append(header, daysGrid, metaCard, habitsCard, revisionCard);
+    // Pendientes de la semana (Trabajo funcional; Vida personal, por ahora, solo en la interfaz)
+    const pendientesCard = el("div", { class: "card" }, el("h3", null, "Pendientes de la semana"));
+
+    pendientesCard.appendChild(el("h4", { class: "pendientes-subtitle" }, "Trabajo"));
+    const trabajoList = el("div", { class: "check-list" });
+    state.getWeekTrabajoPendientes(mondayStr).forEach((item) => {
+      const daySelect = el("select", {
+        class: "day-select",
+        onchange: (e) => state.setWeekTrabajoPendienteDay(mondayStr, item.id, e.target.value),
+      });
+      daySelect.appendChild(el("option", { value: "" }, "Sin asignar"));
+      dateUtils.DAY_KEYS.forEach((dk, i) => {
+        daySelect.appendChild(el("option", { value: dk }, dateUtils.DAY_LABELS_LONG[i]));
+      });
+      daySelect.value = item.dayKey || "";
+
+      trabajoList.appendChild(
+        el(
+          "div",
+          { class: "check-row" + (item.done ? " done" : "") },
+          el("input", {
+            type: "checkbox",
+            checked: item.done ? "checked" : null,
+            onchange: () => state.toggleWeekTrabajoPendiente(mondayStr, item.id),
+          }),
+          el("span", null, item.text),
+          daySelect,
+          el("button", {
+            class: "btn-remove",
+            title: "Quitar pendiente",
+            onclick: () => state.removeWeekTrabajoPendiente(mondayStr, item.id),
+          }, "×")
+        )
+      );
+    });
+    pendientesCard.appendChild(trabajoList);
+
+    const newTrabajoInput = el("input", { type: "text", class: "add-input", placeholder: "Nuevo pendiente de trabajo..." });
+    const newTrabajoDaySelect = el("select", { class: "day-select" });
+    newTrabajoDaySelect.appendChild(el("option", { value: "" }, "Sin asignar"));
+    dateUtils.DAY_KEYS.forEach((dk, i) => {
+      newTrabajoDaySelect.appendChild(el("option", { value: dk }, dateUtils.DAY_LABELS_LONG[i]));
+    });
+    const commitTrabajo = () => {
+      if (newTrabajoInput.value.trim()) {
+        state.addWeekTrabajoPendiente(mondayStr, newTrabajoInput.value, newTrabajoDaySelect.value);
+        newTrabajoInput.value = "";
+        newTrabajoDaySelect.value = "";
+      }
+    };
+    newTrabajoInput.addEventListener("keydown", (e) => { if (e.key === "Enter") commitTrabajo(); });
+    pendientesCard.appendChild(
+      el(
+        "div",
+        { class: "add-row" },
+        newTrabajoInput,
+        newTrabajoDaySelect,
+        el("button", { class: "btn-secondary", onclick: commitTrabajo }, "+ Agregar pendiente")
+      )
+    );
+
+    pendientesCard.appendChild(el("h4", { class: "pendientes-subtitle" }, "Vida personal"));
+    pendientesCard.appendChild(el("p", { class: "muted" }, "Próximamente."));
+
+    container.append(header, daysGrid, metaCard, pendientesCard, habitsCard, revisionCard);
   }
 
   function go(delta) {

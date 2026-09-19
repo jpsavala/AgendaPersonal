@@ -353,6 +353,8 @@ window.Agenda = window.Agenda || {};
       metaSemana: "",
       habits: {},
       revisionViernes: { cumplido: "", ajuste: "" },
+      pendientesTrabajo: [],
+      pendientesPersonal: [],
     };
   }
 
@@ -360,7 +362,59 @@ window.Agenda = window.Agenda || {};
     if (!data.weeks[mondayStr]) {
       data.weeks[mondayStr] = defaultWeek();
     }
-    return data.weeks[mondayStr];
+    const week = data.weeks[mondayStr];
+    // Compatibilidad con semanas guardadas antes de esta sección.
+    if (!week.pendientesTrabajo) week.pendientesTrabajo = [];
+    if (!week.pendientesPersonal) week.pendientesPersonal = [];
+    return week;
+  }
+
+  // ---------- Pendientes de la semana: Trabajo ----------
+  // Cada pendiente pertenece a una sola semana específica y, de forma
+  // opcional, a un día de esa semana (dayKey null = "sin asignar"). El
+  // bloque de Oficina (10:00-14:00) muestra los que estén asignados a su
+  // día correspondiente; es el mismo dato en la vista semanal y la
+  // diaria, así que marcar cumplido en una se refleja en la otra.
+  function getWeekTrabajoPendientes(mondayStr) {
+    return getWeek(mondayStr).pendientesTrabajo;
+  }
+
+  function addWeekTrabajoPendiente(mondayStr, text, dayKey) {
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    getWeek(mondayStr).pendientesTrabajo.push({ id: uid("wt"), text: trimmed, done: false, dayKey: dayKey || null });
+    notify();
+  }
+
+  function removeWeekTrabajoPendiente(mondayStr, id) {
+    const week = getWeek(mondayStr);
+    week.pendientesTrabajo = week.pendientesTrabajo.filter((p) => p.id !== id);
+    notify();
+  }
+
+  function toggleWeekTrabajoPendiente(mondayStr, id) {
+    const week = getWeek(mondayStr);
+    const p = week.pendientesTrabajo.find((p) => p.id === id);
+    if (p) p.done = !p.done;
+    notify();
+  }
+
+  function setWeekTrabajoPendienteDay(mondayStr, id, dayKey) {
+    const week = getWeek(mondayStr);
+    const p = week.pendientesTrabajo.find((p) => p.id === id);
+    if (p) p.dayKey = dayKey || null;
+    notify();
+  }
+
+  // Pendientes de trabajo de ESTA fecha específica asignados a su día de
+  // la semana, dentro de la semana a la que pertenece esa fecha.
+  function getOfficeMorningPendientes(dateStr) {
+    const dayKey = getWeekdayKey(dateStr);
+    return getWeek(getMondayKey(dateStr)).pendientesTrabajo.filter((p) => p.dayKey === dayKey);
+  }
+
+  function toggleOfficePendiente(dateStr, id) {
+    toggleWeekTrabajoPendiente(getMondayKey(dateStr), id);
   }
 
   function setWeekMeta(mondayStr, text) {
@@ -429,6 +483,13 @@ window.Agenda = window.Agenda || {};
     togglePriority,
     getWeek,
     setWeekMeta,
+    getWeekTrabajoPendientes,
+    addWeekTrabajoPendiente,
+    removeWeekTrabajoPendiente,
+    toggleWeekTrabajoPendiente,
+    setWeekTrabajoPendienteDay,
+    getOfficeMorningPendientes,
+    toggleOfficePendiente,
     toggleWeekHabit,
     setRevisionViernes,
     getEvents,
