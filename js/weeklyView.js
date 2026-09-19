@@ -62,13 +62,12 @@ window.Agenda = window.Agenda || {};
           );
           return;
         }
+        const blockTitle = block.time ? `${block.time} — ${block.label}` : block.label;
         if (block.fixed) {
-          dayCard.appendChild(
-            el("p", { class: "schedule-fixed-note" }, `${block.time} — ${block.label}`)
-          );
+          dayCard.appendChild(el("p", { class: "schedule-fixed-note" }, blockTitle));
           return;
         }
-        dayCard.appendChild(el("label", { class: "field-label" }, `${block.time} — ${block.label}`));
+        dayCard.appendChild(el("label", { class: "field-label" }, blockTitle));
         dayCard.appendChild(
           el("textarea", {
             class: "block-textarea",

@@ -20,6 +20,7 @@ window.Agenda = window.Agenda || {};
   function render(container) {
     const dateStr = dateUtils.toISO(currentDate);
     const day = state.getDay(dateStr);
+    const isWeekend = dateUtils.isWeekend(currentDate);
 
     container.innerHTML = "";
 
@@ -94,7 +95,7 @@ window.Agenda = window.Agenda || {};
           el(
             "div",
             { class: "schedule-block-head" },
-            el("span", { class: "schedule-time" }, block.time),
+            block.time ? el("span", { class: "schedule-time" }, block.time) : null,
             el("span", { class: "schedule-label" }, block.label),
             el("input", {
               type: "checkbox",
@@ -168,7 +169,41 @@ window.Agenda = window.Agenda || {};
 
     const grid = el("div", { class: "daily-grid" }, habitsSection, prioritiesSection);
 
-    container.append(header, subtitle, quoteBox, cookToggle, timeline, grid);
+    // Pendientes del fin de semana (solo sábado y domingo, por fecha específica)
+    let weekendSection = null;
+    if (isWeekend) {
+      weekendSection = el("div", { class: "card" }, el("h3", null, "Pendientes del fin de semana"));
+      const weekendList = el("div", { class: "check-list" });
+      state.getWeekendChecklist(dateStr).forEach((item) => {
+        weekendList.appendChild(
+          el(
+            "label",
+            { class: "check-row" + (item.done ? " done" : "") },
+            el("input", {
+              type: "checkbox",
+              checked: item.done ? "checked" : null,
+              onchange: () => state.toggleWeekendItem(dateStr, item.id),
+            }),
+            el("span", null, item.text),
+            el("button", {
+              class: "btn-remove",
+              title: "Quitar pendiente",
+              onclick: () => state.removeWeekendItem(dateStr, item.id),
+            }, "×")
+          )
+        );
+      });
+      weekendSection.appendChild(weekendList);
+      weekendSection.appendChild(addRow("Nuevo pendiente...", (val) => state.addWeekendItem(dateStr, val)));
+    }
+
+    const sections = [header, subtitle, quoteBox];
+    if (!isWeekend) sections.push(cookToggle);
+    sections.push(timeline);
+    if (isWeekend) sections.push(weekendSection);
+    sections.push(grid);
+
+    container.append(...sections);
   }
 
   function addRow(placeholder, onAdd) {

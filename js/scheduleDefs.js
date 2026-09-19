@@ -51,5 +51,17 @@ window.Agenda = window.Agenda || {};
     return [...FIXED_START, ...midday, MARKER, AFTERNOON_FIXED, ...FIXED_END];
   }
 
-  ns.scheduleDefs = { getBlocks };
+  // Sábado y domingo no tienen horario rígido: solo 3 franjas sueltas
+  // de referencia, sin rango de hora obligatorio.
+  const WEEKEND_BLOCKS = [
+    { id: "finde_manana", label: "Mañana" },
+    { id: "finde_tarde", label: "Tarde" },
+    { id: "finde_noche", label: "Noche" },
+  ];
+
+  function getWeekendBlocks() {
+    return WEEKEND_BLOCKS;
+  }
+
+  ns.scheduleDefs = { getBlocks, getWeekendBlocks };
 })(window.Agenda);

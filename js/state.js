@@ -163,18 +163,48 @@ window.Agenda = window.Agenda || {};
   }
 
   // ---------- Días ----------
+  const WEEKEND_CHECKLIST_DEFAULTS = [
+    "Diplomado",
+    "Gimnasio (solo si falté algún día entre semana)",
+    "Lavar ropa",
+    "Limpiar departamento",
+    "Crear contenido",
+    "Editar video",
+    "Escribir guiones",
+    "Generar ideas de contenido",
+    "Correr",
+    "Lectura",
+    "Oficina (ocasional)",
+    "Comida",
+  ];
+
+  function defaultWeekendChecklist() {
+    return WEEKEND_CHECKLIST_DEFAULTS.map((text) => ({ id: uid("w"), text, done: false }));
+  }
+
+  function isWeekendDate(dateStr) {
+    return ns.dateUtils.isWeekend(ns.dateUtils.fromISO(dateStr));
+  }
+
   function defaultDay() {
-    return { cocina: true, blocks: {}, habits: {}, priorities: [] };
+    return { cocina: true, blocks: {}, habits: {}, priorities: [], weekendChecklist: [] };
   }
 
   function getDay(dateStr) {
     if (!data.days[dateStr]) {
       data.days[dateStr] = defaultDay();
+      // Los pendientes del fin de semana se precargan solo al crear el
+      // día por primera vez, para que el usuario los pueda editar o
+      // quitar después sin que reaparezcan.
+      if (isWeekendDate(dateStr)) {
+        data.days[dateStr].weekendChecklist = defaultWeekendChecklist();
+      }
     }
     const day = data.days[dateStr];
     // Compatibilidad con días guardados antes del rediseño del horario.
     if (typeof day.cocina !== "boolean") day.cocina = true;
     if (!day.blocks) day.blocks = {};
+    if (!day.weekendChecklist) day.weekendChecklist = [];
     delete day.hours;
     return day;
   }
@@ -185,11 +215,36 @@ window.Agenda = window.Agenda || {};
 
   function getDayBlocks(dateStr) {
     const day = getDay(dateStr);
-    return ns.scheduleDefs.getBlocks(day.cocina).map((def) => ({
+    const defs = isWeekendDate(dateStr) ? ns.scheduleDefs.getWeekendBlocks() : ns.scheduleDefs.getBlocks(day.cocina);
+    return defs.map((def) => ({
       ...def,
       text: def.marker || def.fixed ? "" : getBlockText(dateStr, def.id),
       done: !!(day.blocks[def.id] && day.blocks[def.id].done),
     }));
+  }
+
+  function getWeekendChecklist(dateStr) {
+    return getDay(dateStr).weekendChecklist;
+  }
+
+  function addWeekendItem(dateStr, text) {
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    getDay(dateStr).weekendChecklist.push({ id: uid("w"), text: trimmed, done: false });
+    notify();
+  }
+
+  function removeWeekendItem(dateStr, id) {
+    const day = getDay(dateStr);
+    day.weekendChecklist = day.weekendChecklist.filter((item) => item.id !== id);
+    notify();
+  }
+
+  function toggleWeekendItem(dateStr, id) {
+    const day = getDay(dateStr);
+    const item = day.weekendChecklist.find((item) => item.id === id);
+    if (item) item.done = !item.done;
+    notify();
   }
 
   function setDayCocina(dateStr, cocina) {
@@ -309,6 +364,10 @@ window.Agenda = window.Agenda || {};
     setDayCocina,
     setBlockText,
     toggleBlockDone,
+    getWeekendChecklist,
+    addWeekendItem,
+    removeWeekendItem,
+    toggleWeekendItem,
     toggleDayHabit,
     addPriority,
     removePriority,
