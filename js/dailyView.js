@@ -45,11 +45,13 @@ window.Agenda = window.Agenda || {};
     const subtitle = el("p", { class: "view-subtitle" }, dateUtils.formatLong(currentDate));
 
     // Frase del día
+    const quote = state.getQuoteForDay(dateStr);
     const quoteBox = el(
       "div",
       { class: "quote-box" },
       el("span", { class: "quote-label" }, "Frase del día"),
-      el("p", { class: "quote-text" }, `“${state.getQuoteForDay(dateStr)}”`)
+      el("p", { class: "quote-text" }, `“${quote.texto}”`),
+      el("p", { class: "quote-author" }, `— ${quote.autor}`)
     );
 
     // Toggle "día que cocino" / "día que no cocino"
