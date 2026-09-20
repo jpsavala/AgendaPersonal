@@ -2,6 +2,9 @@ window.Agenda = window.Agenda || {};
 (function (ns) {
   const { state, dateUtils } = ns;
   let currentDate = new Date();
+  const MEAL_BLOCK_ID = "preparar_comida";
+  const ADD_NEW_MEAL_VALUE = "__add_new__";
+  let addingMeal = false;
 
   function el(tag, attrs, ...children) {
     const node = document.createElement(tag);
@@ -40,6 +43,61 @@ window.Agenda = window.Agenda || {};
     return list;
   }
 
+  function buildMealSelector(dateStr, currentText) {
+    if (addingMeal) {
+      const input = el("input", { type: "text", class: "add-input", placeholder: "Nombre de la comida nueva..." });
+      const commit = () => {
+        if (input.value.trim()) {
+          state.addMeal(input.value);
+          state.setBlockText(dateStr, MEAL_BLOCK_ID, input.value.trim());
+        }
+        addingMeal = false;
+        render(containerRef);
+      };
+      const cancel = () => {
+        addingMeal = false;
+        render(containerRef);
+      };
+      input.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") commit();
+        if (e.key === "Escape") cancel();
+      });
+      return el(
+        "div",
+        { class: "add-row" },
+        input,
+        el("button", { class: "btn-secondary", onclick: commit }, "Guardar"),
+        el("button", { class: "btn-secondary", onclick: cancel }, "Cancelar")
+      );
+    }
+
+    const select = el("select", {
+      class: "meal-select",
+      onchange: (e) => {
+        const val = e.target.value;
+        if (val === ADD_NEW_MEAL_VALUE) {
+          addingMeal = true;
+          render(containerRef);
+          const input = containerRef.querySelector(".add-input");
+          if (input) input.focus();
+          return;
+        }
+        state.setBlockText(dateStr, MEAL_BLOCK_ID, val);
+      },
+    });
+    select.appendChild(el("option", { value: "" }, "— Elegir comida —"));
+    const library = state.getMealLibrary();
+    library.forEach((meal) => {
+      select.appendChild(el("option", { value: meal.name }, meal.name));
+    });
+    if (currentText && !library.some((m) => m.name === currentText)) {
+      select.appendChild(el("option", { value: currentText }, currentText));
+    }
+    select.appendChild(el("option", { value: ADD_NEW_MEAL_VALUE }, "+ Agregar nueva..."));
+    select.value = currentText || "";
+    return select;
+  }
+
   function render(container) {
     const dateStr = dateUtils.toISO(currentDate);
     const day = state.getDay(dateStr);
@@ -58,11 +116,15 @@ window.Agenda = window.Agenda || {};
         value: dateStr,
         onchange: (e) => {
           currentDate = dateUtils.fromISO(e.target.value);
+          addingMeal = false;
           render(container);
         },
       }),
       el("button", { class: "btn-icon", onclick: () => go(1) }, "▶"),
-      el("button", { class: "btn-secondary", onclick: () => { currentDate = new Date(); render(container); } }, "Hoy")
+      el("button", {
+        class: "btn-secondary",
+        onclick: () => { currentDate = new Date(); addingMeal = false; render(container); },
+      }, "Hoy")
     );
 
     const subtitle = el("p", { class: "view-subtitle" }, dateUtils.formatLong(currentDate));
@@ -142,6 +204,8 @@ window.Agenda = window.Agenda || {};
           ),
           block.fixed
             ? (block.text ? el("p", { class: "schedule-readonly-text" }, block.text) : null)
+            : block.id === MEAL_BLOCK_ID
+            ? buildMealSelector(dateStr, block.text)
             : el("input", {
                 type: "text",
                 class: "schedule-input",
@@ -265,6 +329,7 @@ window.Agenda = window.Agenda || {};
   let containerRef = null;
   function go(delta) {
     currentDate = dateUtils.addDays(currentDate, delta);
+    addingMeal = false;
     if (containerRef) render(containerRef);
   }
 

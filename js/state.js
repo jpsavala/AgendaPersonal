@@ -168,6 +168,37 @@ window.Agenda = window.Agenda || {};
     notify();
   }
 
+  // ---------- Librería de comidas (catálogo permanente, sin fecha) ----------
+  function getMealLibrary() {
+    return data.mealLibrary;
+  }
+
+  // Agrega una comida si no existe ya una con el mismo nombre (sin
+  // distinguir mayúsculas/minúsculas) y devuelve la comida resultante.
+  function addMeal(name) {
+    const trimmed = name.trim();
+    if (!trimmed) return null;
+    const existing = data.mealLibrary.find((m) => m.name.toLowerCase() === trimmed.toLowerCase());
+    if (existing) return existing;
+    const meal = { id: uid("m"), name: trimmed };
+    data.mealLibrary.push(meal);
+    notify();
+    return meal;
+  }
+
+  function updateMeal(id, name) {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    const meal = data.mealLibrary.find((m) => m.id === id);
+    if (meal) meal.name = trimmed;
+    persist();
+  }
+
+  function removeMeal(id) {
+    data.mealLibrary = data.mealLibrary.filter((m) => m.id !== id);
+    notify();
+  }
+
   // ---------- Frase del día ----------
   function shuffledIndices(n) {
     const arr = Array.from({ length: n }, (_, i) => i);
@@ -541,6 +572,10 @@ window.Agenda = window.Agenda || {};
 
   ns.state = {
     getHabitsDefs,
+    getMealLibrary,
+    addMeal,
+    updateMeal,
+    removeMeal,
     addHabit,
     removeHabit,
     getQuoteForDay,

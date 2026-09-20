@@ -3,6 +3,9 @@ window.Agenda = window.Agenda || {};
   const { state, dateUtils } = ns;
   let currentMonday = dateUtils.getMonday(new Date());
   let containerRef = null;
+  const MEAL_BLOCK_ID = "preparar_comida";
+  const ADD_NEW_MEAL_VALUE = "__add_new__";
+  let addingMealDate = null;
 
   const OFFICE_BLOCK_OPTIONS = [
     { value: "oficina_manana", label: "10:00–14:00" },
@@ -32,6 +35,61 @@ window.Agenda = window.Agenda || {};
     return select;
   }
 
+  function buildMealSelector(dateStr, currentText) {
+    if (addingMealDate === dateStr) {
+      const input = el("input", { type: "text", class: "add-input", placeholder: "Nombre de la comida nueva..." });
+      const commit = () => {
+        if (input.value.trim()) {
+          state.addMeal(input.value);
+          state.setBlockText(dateStr, MEAL_BLOCK_ID, input.value.trim());
+        }
+        addingMealDate = null;
+        render(containerRef);
+      };
+      const cancel = () => {
+        addingMealDate = null;
+        render(containerRef);
+      };
+      input.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") commit();
+        if (e.key === "Escape") cancel();
+      });
+      return el(
+        "div",
+        { class: "add-row" },
+        input,
+        el("button", { class: "btn-secondary", onclick: commit }, "Guardar"),
+        el("button", { class: "btn-secondary", onclick: cancel }, "Cancelar")
+      );
+    }
+
+    const select = el("select", {
+      class: "meal-select",
+      onchange: (e) => {
+        const val = e.target.value;
+        if (val === ADD_NEW_MEAL_VALUE) {
+          addingMealDate = dateStr;
+          render(containerRef);
+          const input = containerRef.querySelector(".add-input");
+          if (input) input.focus();
+          return;
+        }
+        state.setBlockText(dateStr, MEAL_BLOCK_ID, val);
+      },
+    });
+    select.appendChild(el("option", { value: "" }, "— Elegir comida —"));
+    const library = state.getMealLibrary();
+    library.forEach((meal) => {
+      select.appendChild(el("option", { value: meal.name }, meal.name));
+    });
+    if (currentText && !library.some((m) => m.name === currentText)) {
+      select.appendChild(el("option", { value: currentText }, currentText));
+    }
+    select.appendChild(el("option", { value: ADD_NEW_MEAL_VALUE }, "+ Agregar nueva..."));
+    select.value = currentText || "";
+    return select;
+  }
+
   function render(container) {
     const mondayStr = dateUtils.toISO(currentMonday);
     const week = state.getWeek(mondayStr);
@@ -47,7 +105,7 @@ window.Agenda = window.Agenda || {};
       el("button", { class: "btn-icon", onclick: () => go(1) }, "▶"),
       el("button", {
         class: "btn-secondary",
-        onclick: () => { currentMonday = dateUtils.getMonday(new Date()); render(container); },
+        onclick: () => { currentMonday = dateUtils.getMonday(new Date()); addingMealDate = null; render(container); },
       }, "Esta semana"),
       el("button", {
         class: "btn-secondary",
@@ -109,13 +167,17 @@ window.Agenda = window.Agenda || {};
           return;
         }
         dayCard.appendChild(el("label", { class: "field-label" }, blockTitle));
-        dayCard.appendChild(
-          el("textarea", {
-            class: "block-textarea",
-            rows: "2",
-            oninput: (e) => state.setBlockText(dateStrForDay, block.id, e.target.value),
-          }, block.text)
-        );
+        if (block.id === MEAL_BLOCK_ID) {
+          dayCard.appendChild(buildMealSelector(dateStrForDay, block.text));
+        } else {
+          dayCard.appendChild(
+            el("textarea", {
+              class: "block-textarea",
+              rows: "2",
+              oninput: (e) => state.setBlockText(dateStrForDay, block.id, e.target.value),
+            }, block.text)
+          );
+        }
       });
       daysGrid.appendChild(dayCard);
     });
@@ -258,6 +320,7 @@ window.Agenda = window.Agenda || {};
 
   function go(delta) {
     currentMonday = dateUtils.addDays(currentMonday, delta * 7);
+    addingMealDate = null;
     if (containerRef) render(containerRef);
   }
 

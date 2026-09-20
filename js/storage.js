@@ -16,6 +16,7 @@ window.Agenda = window.Agenda || {};
       days: {},
       weeks: {},
       weekBlocks: {},
+      mealLibrary: [],
       events: {},
       quoteBag: { order: [], pointer: 0 },
       wordBag: { order: [], pointer: 0 },
