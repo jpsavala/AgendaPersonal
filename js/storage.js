@@ -18,6 +18,7 @@ window.Agenda = window.Agenda || {};
       weekBlocks: {},
       events: {},
       quoteBag: { order: [], pointer: 0 },
+      wordBag: { order: [], pointer: 0 },
     };
   }
 

@@ -77,6 +77,17 @@ window.Agenda = window.Agenda || {};
       el("p", { class: "quote-author" }, `— ${quote.autor}`)
     );
 
+    // Palabra del día
+    const word = state.getWordForDay(dateStr);
+    const wordBox = el(
+      "div",
+      { class: "quote-box" },
+      el("span", { class: "quote-label" }, "Palabra del día"),
+      el("p", { class: "word-text" }, word.palabra),
+      el("p", { class: "word-meaning-es" }, word.significadoEs),
+      el("p", { class: "word-meaning-en" }, `EN: ${word.significadoEn}`)
+    );
+
     // Toggle "día que cocino" / "día que no cocino"
     const cookToggle = el(
       "div",
@@ -223,7 +234,7 @@ window.Agenda = window.Agenda || {};
       weekendSection.appendChild(addRow("Nuevo pendiente...", (val) => state.addWeekendItem(dateStr, val)));
     }
 
-    const sections = [header, subtitle, quoteBox];
+    const sections = [header, subtitle, quoteBox, wordBox];
     if (!isWeekend) sections.push(cookToggle);
     sections.push(timeline);
     if (isWeekend) sections.push(weekendSection);

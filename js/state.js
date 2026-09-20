@@ -12,6 +12,7 @@ window.Agenda = window.Agenda || {};
   const { storage } = ns;
   const { toISO } = ns.dateUtils;
   const QUOTES = ns.quotes.QUOTES;
+  const WORDS = ns.wordOfTheDay.WORDS;
 
   let data = storage.load();
   const listeners = [];
@@ -195,6 +196,26 @@ window.Agenda = window.Agenda || {};
       persist();
     }
     return QUOTES[day.quoteIndex] || QUOTES[0];
+  }
+
+  function ensureWordBag() {
+    if (!data.wordBag || !Array.isArray(data.wordBag.order) || data.wordBag.order.length !== WORDS.length) {
+      data.wordBag = { order: shuffledIndices(WORDS.length), pointer: 0 };
+    }
+  }
+
+  function getWordForDay(dateStr) {
+    const day = getDay(dateStr);
+    if (typeof day.wordIndex !== "number") {
+      ensureWordBag();
+      if (data.wordBag.pointer >= data.wordBag.order.length) {
+        data.wordBag = { order: shuffledIndices(WORDS.length), pointer: 0 };
+      }
+      day.wordIndex = data.wordBag.order[data.wordBag.pointer];
+      data.wordBag.pointer += 1;
+      persist();
+    }
+    return WORDS[day.wordIndex] || WORDS[0];
   }
 
   // ---------- Días ----------
@@ -523,6 +544,7 @@ window.Agenda = window.Agenda || {};
     addHabit,
     removeHabit,
     getQuoteForDay,
+    getWordForDay,
     getDay,
     getDayBlocks,
     getBlockText,

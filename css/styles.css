@@ -170,6 +170,27 @@ h2, h3, h4 {
   text-align: right;
 }
 
+.word-text {
+  margin: 0.15rem 0 0.3rem;
+  font-family: var(--font-serif);
+  font-size: 1.3rem;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.word-meaning-es {
+  margin: 0 0 0.3rem;
+  font-size: 0.95rem;
+  color: var(--ink-soft);
+}
+
+.word-meaning-en {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--muted);
+  font-style: italic;
+}
+
 .toggle-group {
   display: flex;
   gap: 0.5rem;
