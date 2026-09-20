@@ -130,7 +130,7 @@ window.Agenda = window.Agenda || {};
             }),
           ),
           block.fixed
-            ? null
+            ? (block.text ? el("p", { class: "schedule-readonly-text" }, block.text) : null)
             : el("input", {
                 type: "text",
                 class: "schedule-input",

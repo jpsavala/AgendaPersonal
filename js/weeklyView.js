@@ -89,6 +89,9 @@ window.Agenda = window.Agenda || {};
         const blockTitle = block.time ? `${block.time} — ${block.label}` : block.label;
         if (block.fixed) {
           dayCard.appendChild(el("p", { class: "schedule-fixed-note" }, blockTitle));
+          if (block.text) {
+            dayCard.appendChild(el("p", { class: "schedule-readonly-text" }, block.text));
+          }
           state.getOfficePendientes(dateStrForDay, block.id).forEach((item) => {
             dayCard.appendChild(
               el(

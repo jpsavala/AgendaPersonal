@@ -214,7 +214,12 @@ window.Agenda = window.Agenda || {};
   ];
 
   function defaultWeekendChecklist() {
-    return WEEKEND_CHECKLIST_DEFAULTS.map((text) => ({ id: uid("w"), text, done: false }));
+    return WEEKEND_CHECKLIST_DEFAULTS.map((text) => ({
+      id: uid("w"),
+      text,
+      done: false,
+      key: text === "Correr" ? "correr" : null,
+    }));
   }
 
   function isWeekendDate(dateStr) {
@@ -248,18 +253,48 @@ window.Agenda = window.Agenda || {};
     return getWeekBlockTemplate(getMondayKey(dateStr), getWeekdayKey(dateStr))[blockId] || "";
   }
 
+  // Gimnasio y corrida entre semana: mientras la fecha caiga dentro del
+  // rango programado en trainingSchedule.js, el bloque se vuelve de
+  // solo lectura con el texto calculado; fuera de rango, se comporta
+  // como antes (editable, texto por plantilla semanal).
+  function getAutoBlockOverride(def, dateStr) {
+    if (def.id === "gimnasio") return ns.trainingSchedule.getGymText(dateStr);
+    if (def.id === "correr") return ns.trainingSchedule.getRunText(dateStr);
+    return undefined;
+  }
+
   function getDayBlocks(dateStr) {
     const day = getDay(dateStr);
     const defs = isWeekendDate(dateStr) ? ns.scheduleDefs.getWeekendBlocks() : ns.scheduleDefs.getBlocks(day.cocina);
-    return defs.map((def) => ({
-      ...def,
-      text: def.marker || def.fixed ? "" : getBlockText(dateStr, def.id),
-      done: !!(day.blocks[def.id] && day.blocks[def.id].done),
-    }));
+    return defs.map((def) => {
+      const done = !!(day.blocks[def.id] && day.blocks[def.id].done);
+      if (def.marker) return { ...def, text: "", done };
+
+      const override = getAutoBlockOverride(def, dateStr);
+      if (override !== undefined) {
+        return { ...def, fixed: true, text: override, done };
+      }
+
+      return {
+        ...def,
+        text: def.fixed ? "" : getBlockText(dateStr, def.id),
+        done,
+      };
+    });
   }
 
+  // El ítem "Correr" del checklist de fin de semana refleja, de solo
+  // lectura, la distancia programada de ese domingo (si la fecha cae
+  // dentro del rango de trainingSchedule.js). Es una transformación al
+  // vuelo, para no persistir el texto calculado en el propio dato.
   function getWeekendChecklist(dateStr) {
-    return getDay(dateStr).weekendChecklist;
+    const items = getDay(dateStr).weekendChecklist;
+    const sundayRun = ns.trainingSchedule.getSundayRunText(dateStr);
+    if (sundayRun === undefined) return items;
+    return items.map((item) => {
+      const isCorrerItem = item.key === "correr" || (item.key === undefined && item.text === "Correr");
+      return isCorrerItem ? { ...item, text: sundayRun } : item;
+    });
   }
 
   function addWeekendItem(dateStr, text) {

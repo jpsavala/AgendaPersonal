@@ -426,6 +426,13 @@ h2, h3, h4 {
   font-style: italic;
 }
 
+.schedule-readonly-text {
+  margin: 0.3rem 0 0.2rem;
+  font-size: 0.9rem;
+  color: var(--ink);
+  font-weight: 600;
+}
+
 .block-textarea {
   width: 100%;
   border: 1px solid var(--border);
