@@ -368,7 +368,8 @@ h2, h3, h4 {
   background: var(--bg);
 }
 
-.day-select {
+.day-select,
+.block-select {
   padding: 0.4rem 0.5rem;
   border: 1px solid var(--border);
   border-radius: 8px;

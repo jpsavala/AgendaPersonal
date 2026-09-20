@@ -4,6 +4,11 @@ window.Agenda = window.Agenda || {};
   let currentMonday = dateUtils.getMonday(new Date());
   let containerRef = null;
 
+  const OFFICE_BLOCK_OPTIONS = [
+    { value: "oficina_manana", label: "10:00–14:00" },
+    { value: "tarde_oficina", label: "16:30–19:00" },
+  ];
+
   function el(tag, attrs, ...children) {
     const node = document.createElement(tag);
     Object.entries(attrs || {}).forEach(([k, v]) => {
@@ -16,6 +21,15 @@ window.Agenda = window.Agenda || {};
       node.appendChild(typeof c === "string" ? document.createTextNode(c) : c);
     });
     return node;
+  }
+
+  function buildBlockSelect(selectedValue, onChange) {
+    const select = el("select", { class: "block-select", onchange: onChange });
+    OFFICE_BLOCK_OPTIONS.forEach((opt) => {
+      select.appendChild(el("option", { value: opt.value }, opt.label));
+    });
+    select.value = selectedValue || OFFICE_BLOCK_OPTIONS[0].value;
+    return select;
   }
 
   function render(container) {
@@ -75,22 +89,20 @@ window.Agenda = window.Agenda || {};
         const blockTitle = block.time ? `${block.time} — ${block.label}` : block.label;
         if (block.fixed) {
           dayCard.appendChild(el("p", { class: "schedule-fixed-note" }, blockTitle));
-          if (block.id === "oficina_manana") {
-            state.getOfficeMorningPendientes(dateStrForDay).forEach((item) => {
-              dayCard.appendChild(
-                el(
-                  "label",
-                  { class: "check-row" + (item.done ? " done" : "") },
-                  el("input", {
-                    type: "checkbox",
-                    checked: item.done ? "checked" : null,
-                    onchange: () => state.toggleWeekTrabajoPendiente(mondayStr, item.id),
-                  }),
-                  el("span", null, item.text)
-                )
-              );
-            });
-          }
+          state.getOfficePendientes(dateStrForDay, block.id).forEach((item) => {
+            dayCard.appendChild(
+              el(
+                "label",
+                { class: "check-row" + (item.done ? " done" : "") },
+                el("input", {
+                  type: "checkbox",
+                  checked: item.done ? "checked" : null,
+                  onchange: () => state.toggleWeekTrabajoPendiente(mondayStr, item.id),
+                }),
+                el("span", null, item.text)
+              )
+            );
+          });
           return;
         }
         dayCard.appendChild(el("label", { class: "field-label" }, blockTitle));
@@ -182,6 +194,10 @@ window.Agenda = window.Agenda || {};
       });
       daySelect.value = item.dayKey || "";
 
+      const blockSelect = buildBlockSelect(item.blockId, (e) =>
+        state.setWeekTrabajoPendienteBlock(mondayStr, item.id, e.target.value)
+      );
+
       trabajoList.appendChild(
         el(
           "div",
@@ -193,6 +209,7 @@ window.Agenda = window.Agenda || {};
           }),
           el("span", null, item.text),
           daySelect,
+          blockSelect,
           el("button", {
             class: "btn-remove",
             title: "Quitar pendiente",
@@ -209,11 +226,13 @@ window.Agenda = window.Agenda || {};
     dateUtils.DAY_KEYS.forEach((dk, i) => {
       newTrabajoDaySelect.appendChild(el("option", { value: dk }, dateUtils.DAY_LABELS_LONG[i]));
     });
+    const newTrabajoBlockSelect = buildBlockSelect(OFFICE_BLOCK_OPTIONS[0].value);
     const commitTrabajo = () => {
       if (newTrabajoInput.value.trim()) {
-        state.addWeekTrabajoPendiente(mondayStr, newTrabajoInput.value, newTrabajoDaySelect.value);
+        state.addWeekTrabajoPendiente(mondayStr, newTrabajoInput.value, newTrabajoDaySelect.value, newTrabajoBlockSelect.value);
         newTrabajoInput.value = "";
         newTrabajoDaySelect.value = "";
+        newTrabajoBlockSelect.value = OFFICE_BLOCK_OPTIONS[0].value;
       }
     };
     newTrabajoInput.addEventListener("keydown", (e) => { if (e.key === "Enter") commitTrabajo(); });
@@ -223,6 +242,7 @@ window.Agenda = window.Agenda || {};
         { class: "add-row" },
         newTrabajoInput,
         newTrabajoDaySelect,
+        newTrabajoBlockSelect,
         el("button", { class: "btn-secondary", onclick: commitTrabajo }, "+ Agregar pendiente")
       )
     );

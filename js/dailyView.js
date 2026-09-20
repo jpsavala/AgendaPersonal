@@ -17,8 +17,10 @@ window.Agenda = window.Agenda || {};
     return node;
   }
 
-  function buildOfficePendientesList(dateStr) {
-    const items = state.getOfficeMorningPendientes(dateStr);
+  const OFFICE_BLOCK_IDS = ["oficina_manana", "tarde_oficina"];
+
+  function buildOfficePendientesList(dateStr, blockId) {
+    const items = state.getOfficePendientes(dateStr, blockId);
     if (!items.length) return null;
     const list = el("div", { class: "office-pendientes-list" });
     items.forEach((item) => {
@@ -136,7 +138,7 @@ window.Agenda = window.Agenda || {};
                 value: block.text,
                 oninput: (e) => state.setBlockText(dateStr, block.id, e.target.value),
               }),
-          block.id === "oficina_manana" ? buildOfficePendientesList(dateStr) : null
+          OFFICE_BLOCK_IDS.includes(block.id) ? buildOfficePendientesList(dateStr, block.id) : null
         )
       );
     });

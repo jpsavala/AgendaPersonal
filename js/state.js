@@ -366,23 +366,38 @@ window.Agenda = window.Agenda || {};
     // Compatibilidad con semanas guardadas antes de esta sección.
     if (!week.pendientesTrabajo) week.pendientesTrabajo = [];
     if (!week.pendientesPersonal) week.pendientesPersonal = [];
+    // Compatibilidad con pendientes guardados antes de poder elegir
+    // bloque: antes siempre se mostraban en el de 10:00-14:00.
+    week.pendientesTrabajo.forEach((p) => {
+      if (!OFFICE_BLOCK_IDS.includes(p.blockId)) p.blockId = DEFAULT_OFFICE_BLOCK_ID;
+    });
     return week;
   }
 
   // ---------- Pendientes de la semana: Trabajo ----------
+  // Bloques de oficina a los que se puede asignar un pendiente de trabajo.
+  const OFFICE_BLOCK_IDS = ["oficina_manana", "tarde_oficina"];
+  const DEFAULT_OFFICE_BLOCK_ID = "oficina_manana";
+
   // Cada pendiente pertenece a una sola semana específica y, de forma
-  // opcional, a un día de esa semana (dayKey null = "sin asignar"). El
-  // bloque de Oficina (10:00-14:00) muestra los que estén asignados a su
-  // día correspondiente; es el mismo dato en la vista semanal y la
-  // diaria, así que marcar cumplido en una se refleja en la otra.
+  // opcional, a un día de esa semana (dayKey null = "sin asignar"), más
+  // el bloque de oficina de ese día (10:00-14:00 o 16:30-19:00) donde se
+  // debe mostrar. Es el mismo dato en la vista semanal y la diaria, así
+  // que marcar cumplido en una se refleja en la otra.
   function getWeekTrabajoPendientes(mondayStr) {
     return getWeek(mondayStr).pendientesTrabajo;
   }
 
-  function addWeekTrabajoPendiente(mondayStr, text, dayKey) {
+  function addWeekTrabajoPendiente(mondayStr, text, dayKey, blockId) {
     const trimmed = text.trim();
     if (!trimmed) return;
-    getWeek(mondayStr).pendientesTrabajo.push({ id: uid("wt"), text: trimmed, done: false, dayKey: dayKey || null });
+    getWeek(mondayStr).pendientesTrabajo.push({
+      id: uid("wt"),
+      text: trimmed,
+      done: false,
+      dayKey: dayKey || null,
+      blockId: OFFICE_BLOCK_IDS.includes(blockId) ? blockId : DEFAULT_OFFICE_BLOCK_ID,
+    });
     notify();
   }
 
@@ -406,11 +421,19 @@ window.Agenda = window.Agenda || {};
     notify();
   }
 
+  function setWeekTrabajoPendienteBlock(mondayStr, id, blockId) {
+    const week = getWeek(mondayStr);
+    const p = week.pendientesTrabajo.find((p) => p.id === id);
+    if (p) p.blockId = OFFICE_BLOCK_IDS.includes(blockId) ? blockId : DEFAULT_OFFICE_BLOCK_ID;
+    notify();
+  }
+
   // Pendientes de trabajo de ESTA fecha específica asignados a su día de
-  // la semana, dentro de la semana a la que pertenece esa fecha.
-  function getOfficeMorningPendientes(dateStr) {
+  // la semana y al bloque de oficina indicado, dentro de la semana a la
+  // que pertenece esa fecha.
+  function getOfficePendientes(dateStr, blockId) {
     const dayKey = getWeekdayKey(dateStr);
-    return getWeek(getMondayKey(dateStr)).pendientesTrabajo.filter((p) => p.dayKey === dayKey);
+    return getWeek(getMondayKey(dateStr)).pendientesTrabajo.filter((p) => p.dayKey === dayKey && p.blockId === blockId);
   }
 
   function toggleOfficePendiente(dateStr, id) {
@@ -488,7 +511,8 @@ window.Agenda = window.Agenda || {};
     removeWeekTrabajoPendiente,
     toggleWeekTrabajoPendiente,
     setWeekTrabajoPendienteDay,
-    getOfficeMorningPendientes,
+    setWeekTrabajoPendienteBlock,
+    getOfficePendientes,
     toggleOfficePendiente,
     toggleWeekHabit,
     setRevisionViernes,
