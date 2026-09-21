@@ -147,6 +147,10 @@ window.Agenda = window.Agenda || {};
         { class: "card week-day-card" + (isWeekend ? " weekend" : "") },
         el("h4", null, `${dateUtils.DAY_LABELS_LONG[i]} ${date.getDate()}`)
       );
+      // Cumpleaños y eventos especiales de este día (vista Año / Mensual)
+      state.getEvents(dateStrForDay).forEach((ev) => {
+        dayCard.appendChild(el("p", { class: "event-banner-item compact" }, `🎉 ${ev.text}`));
+      });
       // Mismos bloques que la vista diaria: el texto es la plantilla de
       // este día de la semana, así que editarlo aquí también lo cambia
       // en la vista diaria (y viceversa). El toggle "día que cocino" es

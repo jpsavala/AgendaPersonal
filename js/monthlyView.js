@@ -45,6 +45,18 @@ window.Agenda = window.Agenda || {};
     });
     calendar.appendChild(headRow);
 
+    const monthKey = `${currentYear}-${dateUtils.pad2(currentMonth + 1)}`;
+    const metaCard = el(
+      "div",
+      { class: "card" },
+      el("h3", null, "Meta(s) del mes"),
+      el("textarea", {
+        class: "block-textarea",
+        rows: "3",
+        oninput: (e) => state.setMonthMeta(monthKey, e.target.value),
+      }, state.getMonthMeta(monthKey))
+    );
+
     weeks.forEach((week) => {
       const row = el("div", { class: "calendar-row" });
       week.forEach((date, i) => {
@@ -72,7 +84,7 @@ window.Agenda = window.Agenda || {};
       calendar.appendChild(row);
     });
 
-    container.append(header, calendar);
+    container.append(header, calendar, metaCard);
   }
 
   function openDayModal(dateStr, container) {

@@ -592,11 +592,92 @@ window.Agenda = window.Agenda || {};
     notify();
   }
 
+  // Lista plana de todos los eventos, con su fecha, para gestionarlos
+  // desde la vista Año. Es el mismo almacén que usa la vista Mensual.
+  function getAllEvents() {
+    const result = [];
+    Object.keys(data.events || {}).forEach((dateStr) => {
+      (data.events[dateStr] || []).forEach((ev) => {
+        result.push({ id: ev.id, text: ev.text, date: dateStr });
+      });
+    });
+    result.sort((a, b) => a.date.localeCompare(b.date));
+    return result;
+  }
+
+  function updateEventText(id, text) {
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    Object.values(data.events || {}).forEach((list) => {
+      const ev = list.find((e) => e.id === id);
+      if (ev) ev.text = trimmed;
+    });
+    persist();
+  }
+
+  function moveEvent(id, newDateStr) {
+    if (!newDateStr) return;
+    let event = null;
+    let oldDateStr = null;
+    Object.keys(data.events || {}).forEach((dateStr) => {
+      const idx = (data.events[dateStr] || []).findIndex((e) => e.id === id);
+      if (idx !== -1) {
+        event = data.events[dateStr][idx];
+        oldDateStr = dateStr;
+      }
+    });
+    if (!event || oldDateStr === newDateStr) return;
+    data.events[oldDateStr] = data.events[oldDateStr].filter((e) => e.id !== id);
+    if (!data.events[newDateStr]) data.events[newDateStr] = [];
+    data.events[newDateStr].push(event);
+    notify();
+  }
+
   function dayHasIndicator(dateStr) {
     const hasEvents = (data.events[dateStr] || []).length > 0;
     const day = data.days[dateStr];
     const hasPendingPriority = !!(day && day.priorities.some((p) => !p.done));
     return hasEvents || hasPendingPriority;
+  }
+
+  // ---------- Metas del año (por trimestre, sin fecha) ----------
+  function getYearGoals(year) {
+    if (!data.yearGoals) data.yearGoals = {};
+    const key = String(year);
+    if (!data.yearGoals[key]) data.yearGoals[key] = { q1: [], q2: [], q3: [], q4: [] };
+    return data.yearGoals[key];
+  }
+
+  function addYearGoal(year, quarter, text) {
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    getYearGoals(year)[quarter].push({ id: uid("yg"), text: trimmed, done: false });
+    notify();
+  }
+
+  function removeYearGoal(year, quarter, id) {
+    const goals = getYearGoals(year);
+    goals[quarter] = goals[quarter].filter((g) => g.id !== id);
+    notify();
+  }
+
+  function toggleYearGoal(year, quarter, id) {
+    const goals = getYearGoals(year);
+    const g = goals[quarter].find((g) => g.id === id);
+    if (g) g.done = !g.done;
+    notify();
+  }
+
+  // ---------- Meta(s) del mes (independiente de la meta semanal y anual) ----------
+  function getMonthMeta(monthKey) {
+    if (!data.monthMeta) data.monthMeta = {};
+    return data.monthMeta[monthKey] || "";
+  }
+
+  function setMonthMeta(monthKey, text) {
+    if (!data.monthMeta) data.monthMeta = {};
+    data.monthMeta[monthKey] = text;
+    persist();
   }
 
   ns.state = {
@@ -640,7 +721,16 @@ window.Agenda = window.Agenda || {};
     getEvents,
     addEvent,
     removeEvent,
+    getAllEvents,
+    updateEventText,
+    moveEvent,
     dayHasIndicator,
+    getYearGoals,
+    addYearGoal,
+    removeYearGoal,
+    toggleYearGoal,
+    getMonthMeta,
+    setMonthMeta,
     onChange,
   };
 })(window.Agenda);

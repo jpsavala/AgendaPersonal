@@ -129,6 +129,16 @@ window.Agenda = window.Agenda || {};
 
     const subtitle = el("p", { class: "view-subtitle" }, dateUtils.formatLong(currentDate));
 
+    // Cumpleaños y eventos especiales de este día (vista Año / Mensual)
+    const events = state.getEvents(dateStr);
+    const eventsBanner = events.length
+      ? el(
+          "div",
+          { class: "event-banner" },
+          events.map((ev) => el("p", { class: "event-banner-item" }, `🎉 ${ev.text}`))
+        )
+      : null;
+
     // Frase del día
     const quote = state.getQuoteForDay(dateStr);
     const quoteBox = el(
@@ -298,13 +308,13 @@ window.Agenda = window.Agenda || {};
       weekendSection.appendChild(addRow("Nuevo pendiente...", (val) => state.addWeekendItem(dateStr, val)));
     }
 
-    const sections = [header, subtitle, quoteBox, wordBox];
+    const sections = [header, subtitle, eventsBanner, quoteBox, wordBox];
     if (!isWeekend) sections.push(cookToggle);
     sections.push(timeline);
     if (isWeekend) sections.push(weekendSection);
     sections.push(grid);
 
-    container.append(...sections);
+    container.append(...sections.filter(Boolean));
   }
 
   function addRow(placeholder, onAdd) {

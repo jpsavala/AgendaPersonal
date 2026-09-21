@@ -5,6 +5,7 @@ window.Agenda = window.Agenda || {};
     semanal: ns.weeklyView,
     mensual: ns.monthlyView,
     comidas: ns.mealsView,
+    anio: ns.yearView,
   };
   let activeTab = "diaria";
   let viewContainer;

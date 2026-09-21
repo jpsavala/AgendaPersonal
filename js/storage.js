@@ -18,6 +18,8 @@ window.Agenda = window.Agenda || {};
       weekBlocks: {},
       mealLibrary: [],
       events: {},
+      yearGoals: {},
+      monthMeta: {},
       quoteBag: { order: [], pointer: 0 },
       wordBag: { order: [], pointer: 0 },
     };

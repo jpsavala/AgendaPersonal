@@ -183,6 +183,29 @@ h2, h3, h4 {
   color-scheme: light;
 }
 
+.event-banner {
+  background: var(--surface);
+  border: 1px solid var(--accent-green);
+  border-radius: 8px;
+  padding: 0.6rem 0.9rem;
+  margin-bottom: 1.25rem;
+}
+
+.event-banner-item {
+  margin: 0;
+  font-weight: 600;
+  color: var(--accent-green);
+}
+
+.event-banner-item + .event-banner-item {
+  margin-top: 0.3rem;
+}
+
+.event-banner-item.compact {
+  font-size: 0.82rem;
+  margin: 0 0 0.5rem;
+}
+
 .quote-box {
   background: var(--surface);
   border-left: 4px solid var(--accent-gold);
