@@ -179,10 +179,76 @@ window.Agenda = window.Agenda || {};
       if (ns.dateUtils.isoWeekday(cursor) <= 4) pointer += 1; // lunes(0)...viernes(4)
       cursor = ns.dateUtils.addDays(cursor, 1);
     }
+    const seeded = Math.min(pointer, GYM_QUEUE_SESSIONS.length);
     data.gymQueue = {
-      pointer: Math.min(pointer, GYM_QUEUE_SESSIONS.length),
+      pointer: seeded,
+      pointerAtSeed: seeded,
       seedAnchor: startStr,
       resolutions: {},
+      unavailable: {},
+    };
+  }
+
+  // Corrección puntual (una sola vez): el calendario real terminó
+  // corriéndose respecto al que había calculado la migración anterior
+  // (el usuario confirmó por fuera de la app en qué sesión va cada
+  // fecha real). En vez de tratar de reconstruir el historial exacto de
+  // clics, se fuerza la cola a esta tabla de fechas → índice de sesión,
+  // confirmada como fuente de verdad. Sirve para cualquier "hoy" en el
+  // que cargue esta versión: busca la primera fecha de la tabla que sea
+  // hoy o futura (esa sesión queda pendiente) y ancla la simulación ahí;
+  // todo lo anterior a esa fecha se da por hecho, sin necesidad de
+  // inventar resoluciones día por día. Después de la última fecha de la
+  // tabla, la cola sigue su curso normal (cascada / sábado comodín) tal
+  // cual venía funcionando.
+  const GYM_CALENDAR_CORRECTION = [
+    ["2026-09-22", 3], // Día 4 — Pierna - Cuádriceps
+    ["2026-09-23", 4], // Día 5 — Tracción
+    ["2026-09-24", 5], // Semana 2 — Día 1 — Torso
+    ["2026-09-25", 6], // Día 2 — Pierna - Glúteo/Femoral
+    ["2026-09-28", 7], // Día 3 — Empuje
+    ["2026-09-29", 8], // Día 4 — Pierna - Cuádriceps
+    ["2026-09-30", 9], // Día 5 — Tracción
+    ["2026-10-01", 10], // Semana 3 — Día 1 — Torso
+    ["2026-10-02", 11], // Día 2 — Pierna - Glúteo/Femoral
+    ["2026-10-05", 12], // Día 3 — Empuje
+    ["2026-10-06", 13], // Día 4 — Pierna - Cuádriceps
+    ["2026-10-07", 14], // Día 5 — Tracción
+    ["2026-10-08", 15], // Semana 4 (descarga) — Día 1 — Torso (descarga)
+    ["2026-10-09", 16], // Día 2 — Pierna - Glúteo/Femoral (descarga)
+    ["2026-10-12", 17], // Día 3 — Empuje (descarga)
+    ["2026-10-13", 18], // Día 4 — Pierna - Cuádriceps (descarga)
+    ["2026-10-14", 19], // Día 5 — Tracción (descarga): cierre del Bloque 5
+  ];
+
+  function migrateGymQueueCorrection() {
+    if (data.gymQueueCorrectionApplied) return;
+    data.gymQueueCorrectionApplied = true;
+    const todayStr = toISO(new Date());
+    // Las fechas de la tabla anteriores a "hoy" quedan como resueltas
+    // ("done"), para que se sigan viendo bien aunque esta corrección
+    // recién se cargue varios días después de alguna de ellas. La
+    // primera fecha de la tabla es el ancla de respaldo por si "hoy"
+    // todavía no llega ni a esa primera fecha.
+    const resolutions = {};
+    const baseIndex = GYM_CALENDAR_CORRECTION.length ? GYM_CALENDAR_CORRECTION[0][1] : GYM_QUEUE_SESSIONS.length;
+    let pointer = baseIndex;
+    GYM_CALENDAR_CORRECTION.forEach(([d, idx]) => {
+      if (d < todayStr) {
+        resolutions[d] = { status: "done", index: idx };
+        pointer = idx + 1;
+      }
+    });
+    data.gymQueue = {
+      pointer: Math.min(pointer, GYM_QUEUE_SESSIONS.length),
+      // A diferencia de `pointer` (que sí avanza con las resoluciones de
+      // arriba), este queda fijo en el índice que tenía la cola justo en
+      // `seedAnchor`: es la base para calcular el atraso real de días
+      // hábiles a partir de ahí (ver makeIsValidGymDay), sin que las
+      // resoluciones ya aplicadas la desalineen.
+      pointerAtSeed: baseIndex,
+      seedAnchor: GYM_CALENDAR_CORRECTION.length ? GYM_CALENDAR_CORRECTION[0][0] : todayStr,
+      resolutions,
       unavailable: {},
     };
   }
@@ -204,17 +270,23 @@ window.Agenda = window.Agenda || {};
 
   // Días hábiles para la cola de gimnasio: lunes a viernes siempre;
   // sábado solo si, para cuando la simulación llega a él, todavía hay
-  // menos sesiones consumidas (idxSoFar) que días hábiles ya pasaron en
-  // total desde que arrancó este sistema (es decir, hay atraso que
-  // recuperar, sin importar de qué semana venga). Se genera una función
-  // nueva por cada simulación: arranca su contador ya con los días
+  // menos sesiones consumidas (idxSoFar) que días hábiles "deberían"
+  // haber pasado en total desde que arrancó este sistema (es decir, hay
+  // atraso que recuperar, sin importar de qué semana venga). El punto de
+  // partida de ese conteo NO es cero: es pointerAtSeed, el índice que ya
+  // tenía la cola en seedAnchor (por la migración o por una corrección
+  // puntual) — si se arrancara en cero acá pero el puntero ya venía
+  // adelantado, cualquier comparación quedaría desalineada y activaría
+  // sábados de más (o de menos). Se genera una función nueva por cada
+  // simulación: arranca su contador ya con pointerAtSeed más los días
   // hábiles previos al punto donde retoma la simulación (ver
   // scheduleQueue.anchorOf), y de ahí en adelante lo va sumando día a
   // día en el mismo orden en que los recorre resolve().
   function makeIsValidGymDay() {
     const anchor = ns.scheduleQueue.anchorOf(data.gymQueue);
     const dayBeforeAnchor = toISO(ns.dateUtils.addDays(ns.dateUtils.fromISO(anchor), -1));
-    let weekdaysSoFar = countWeekdaysBetween(data.gymQueue.seedAnchor, dayBeforeAnchor);
+    const pointerAtSeed = data.gymQueue.pointerAtSeed || 0;
+    let weekdaysSoFar = pointerAtSeed + countWeekdaysBetween(data.gymQueue.seedAnchor, dayBeforeAnchor);
     return function (dateStr, idxSoFar) {
       const wd = ns.dateUtils.isoWeekday(ns.dateUtils.fromISO(dateStr));
       if (wd === 6) return false; // domingo: descanso siempre
@@ -270,6 +342,7 @@ window.Agenda = window.Agenda || {};
   purgeFixedBlockText();
   migrateNocheBlockSplit();
   migrateGymQueue();
+  migrateGymQueueCorrection();
   persist();
 
   function onChange(fn) {
