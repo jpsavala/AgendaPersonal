@@ -1,12 +1,13 @@
 :root {
-  --ink: #1c2333;
-  --ink-soft: #2a3145;
-  --wine: #7a3b2e;
-  --wine-dark: #5f2d22;
-  --bg: #faf3e8;
-  --surface: #fffdf9;
-  --border: #e4d9c8;
-  --muted: #6b6f7a;
+  --bg: #121317;
+  --surface: #1c1e24;
+  --text-primary: #edebe6;
+  --text-muted: #8a8c93;
+  --border: #2a2c33;
+  --accent-wine: #7d2e3d;
+  --accent-wine-light: #b5586a;
+  --accent-teal: #2e6f6e;
+  --accent-purple: #6b4e8e;
   --font-serif: Georgia, "Times New Roman", serif;
   --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
 }
@@ -18,14 +19,15 @@
 body {
   margin: 0;
   background: var(--bg);
-  color: var(--ink);
+  color: var(--text-primary);
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
 }
 
 header.app-header {
-  background: var(--ink);
-  color: var(--bg);
+  background: var(--surface);
+  color: var(--text-primary);
+  border-bottom: 1px solid var(--border);
   padding: 1rem 1.25rem;
   display: flex;
   align-items: center;
@@ -34,11 +36,33 @@ header.app-header {
   gap: 0.75rem;
 }
 
-header.app-header h1 {
+.masthead {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.masthead-badge {
+  flex: 0 0 auto;
+  width: 2.2rem;
+  height: 2.2rem;
+  border-radius: 50%;
+  border: 1px solid var(--accent-wine);
+  display: flex;
+  align-items: center;
+  justify-content: center;
   font-family: var(--font-serif);
-  font-size: 1.4rem;
-  margin: 0;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--accent-wine-light);
   letter-spacing: 0.02em;
+}
+
+.masthead-name {
+  font-family: var(--font-serif);
+  font-size: 1.05rem;
+  letter-spacing: 0.02em;
+  color: var(--text-primary);
 }
 
 nav.tabs {
@@ -49,23 +73,25 @@ nav.tabs {
 
 .tab-button {
   background: transparent;
-  border: 1px solid rgba(250, 243, 232, 0.35);
-  color: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
   padding: 0.5rem 1rem;
   border-radius: 999px;
   font-family: var(--font-sans);
   font-size: 0.9rem;
   cursor: pointer;
-  transition: background 0.15s ease;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
 }
 
 .tab-button:hover {
-  background: rgba(250, 243, 232, 0.15);
+  border-color: var(--accent-wine);
+  color: var(--text-primary);
 }
 
 .tab-button.active {
-  background: var(--wine);
-  border-color: var(--wine);
+  background: var(--accent-wine);
+  border-color: var(--accent-wine);
+  color: var(--text-primary);
 }
 
 main {
@@ -76,7 +102,7 @@ main {
 
 h2, h3, h4 {
   font-family: var(--font-serif);
-  color: var(--ink);
+  color: var(--text-primary);
   margin: 0 0 0.6rem;
 }
 
@@ -91,19 +117,20 @@ h2, h3, h4 {
 .view-subtitle {
   font-family: var(--font-serif);
   font-size: 1.05rem;
-  color: var(--ink-soft);
+  color: var(--text-primary);
   margin: 0 0 1rem;
 }
 
 .week-range {
   font-family: var(--font-serif);
   font-size: 1.05rem;
+  color: var(--text-primary);
 }
 
 .btn-icon {
   background: var(--surface);
   border: 1px solid var(--border);
-  color: var(--ink);
+  color: var(--text-primary);
   border-radius: 8px;
   width: 2.2rem;
   height: 2.2rem;
@@ -112,13 +139,13 @@ h2, h3, h4 {
 }
 
 .btn-icon:hover {
-  border-color: var(--wine);
+  border-color: var(--accent-wine);
 }
 
 .btn-secondary {
   background: var(--surface);
   border: 1px solid var(--border);
-  color: var(--ink);
+  color: var(--text-primary);
   border-radius: 8px;
   padding: 0.5rem 0.9rem;
   cursor: pointer;
@@ -127,8 +154,25 @@ h2, h3, h4 {
 }
 
 .btn-secondary:hover {
-  border-color: var(--wine);
-  color: var(--wine-dark);
+  border-color: var(--accent-wine);
+  color: var(--accent-wine-light);
+}
+
+.btn-primary {
+  background: var(--accent-wine);
+  border: 1px solid var(--accent-wine);
+  color: var(--text-primary);
+  border-radius: 8px;
+  padding: 0.5rem 0.9rem;
+  cursor: pointer;
+  font-family: var(--font-sans);
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.btn-primary:hover {
+  background: var(--accent-wine-light);
+  border-color: var(--accent-wine-light);
 }
 
 .date-picker {
@@ -137,12 +181,13 @@ h2, h3, h4 {
   border: 1px solid var(--border);
   border-radius: 8px;
   background: var(--surface);
-  color: var(--ink);
+  color: var(--text-primary);
+  color-scheme: dark;
 }
 
 .quote-box {
   background: var(--surface);
-  border-left: 4px solid var(--wine);
+  border-left: 4px solid var(--accent-purple);
   border-radius: 8px;
   padding: 0.9rem 1.1rem;
   margin-bottom: 1.25rem;
@@ -153,7 +198,7 @@ h2, h3, h4 {
   font-size: 0.75rem;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  color: var(--wine-dark);
+  color: var(--accent-purple);
   margin-bottom: 0.25rem;
 }
 
@@ -161,13 +206,13 @@ h2, h3, h4 {
   margin: 0;
   font-family: var(--font-serif);
   font-style: italic;
-  color: var(--ink-soft);
+  color: var(--text-primary);
 }
 
 .quote-author {
   margin: 0.35rem 0 0;
   font-size: 0.82rem;
-  color: var(--muted);
+  color: var(--text-muted);
   text-align: right;
 }
 
@@ -176,19 +221,19 @@ h2, h3, h4 {
   font-family: var(--font-serif);
   font-size: 1.3rem;
   font-weight: 700;
-  color: var(--ink);
+  color: var(--text-primary);
 }
 
 .word-meaning-es {
   margin: 0 0 0.3rem;
   font-size: 0.95rem;
-  color: var(--ink-soft);
+  color: var(--text-primary);
 }
 
 .word-meaning-en {
   margin: 0;
   font-size: 0.85rem;
-  color: var(--muted);
+  color: var(--text-muted);
   font-style: italic;
 }
 
@@ -202,7 +247,7 @@ h2, h3, h4 {
   flex: 1;
   background: var(--surface);
   border: 1px solid var(--border);
-  color: var(--muted);
+  color: var(--text-muted);
   border-radius: 999px;
   padding: 0.55rem 1rem;
   font-family: var(--font-sans);
@@ -213,13 +258,13 @@ h2, h3, h4 {
 }
 
 .toggle-btn:hover {
-  border-color: var(--wine);
+  border-color: var(--accent-wine);
 }
 
 .toggle-btn.active {
-  background: var(--wine);
-  border-color: var(--wine);
-  color: #fff;
+  background: var(--accent-wine);
+  border-color: var(--accent-wine);
+  color: var(--text-primary);
 }
 
 .schedule {
@@ -238,8 +283,8 @@ h2, h3, h4 {
 }
 
 .schedule-block.highlight {
-  border-left-color: var(--wine);
-  background: rgba(122, 59, 46, 0.06);
+  border-left-color: var(--accent-wine);
+  background: rgba(125, 46, 61, 0.12);
 }
 
 .schedule-block-head {
@@ -253,7 +298,7 @@ h2, h3, h4 {
 .schedule-time {
   flex: 0 0 auto;
   font-size: 0.8rem;
-  color: var(--wine-dark);
+  color: var(--accent-wine-light);
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
@@ -263,13 +308,13 @@ h2, h3, h4 {
   flex: 1;
   font-size: 0.95rem;
   font-weight: 600;
-  color: var(--ink);
+  color: var(--text-primary);
 }
 
 .schedule-check {
   width: 1.1rem;
   height: 1.1rem;
-  accent-color: var(--wine);
+  accent-color: var(--accent-teal);
   flex-shrink: 0;
 }
 
@@ -281,12 +326,12 @@ h2, h3, h4 {
   padding: 0.3rem 0.1rem;
   font-family: var(--font-sans);
   font-size: 0.9rem;
-  color: var(--ink);
+  color: var(--text-primary);
 }
 
 .schedule-input:focus {
   outline: none;
-  border-bottom: 1px solid var(--wine);
+  border-bottom: 1px solid var(--accent-wine);
 }
 
 .meal-select {
@@ -297,7 +342,7 @@ h2, h3, h4 {
   font-family: var(--font-sans);
   font-size: 0.9rem;
   background: var(--bg);
-  color: var(--ink);
+  color: var(--text-primary);
 }
 
 .meal-list {
@@ -321,12 +366,12 @@ h2, h3, h4 {
   font-family: var(--font-sans);
   font-size: 0.95rem;
   background: var(--surface);
-  color: var(--ink);
+  color: var(--text-primary);
 }
 
 .meal-name-input:focus {
   outline: none;
-  border-color: var(--wine);
+  border-color: var(--accent-wine);
 }
 
 .schedule-marker {
@@ -334,7 +379,7 @@ h2, h3, h4 {
   align-items: center;
   gap: 0.6rem;
   padding: 0.15rem 0.2rem;
-  color: var(--muted);
+  color: var(--text-muted);
 }
 
 .schedule-marker::before,
@@ -387,13 +432,13 @@ h2, h3, h4 {
 
 .check-row.done span {
   text-decoration: line-through;
-  color: var(--muted);
+  color: var(--text-muted);
 }
 
 .check-row input[type="checkbox"] {
   width: 1.05rem;
   height: 1.05rem;
-  accent-color: var(--wine);
+  accent-color: var(--accent-teal);
   flex-shrink: 0;
 }
 
@@ -404,7 +449,7 @@ h2, h3, h4 {
 .btn-remove {
   background: transparent;
   border: none;
-  color: var(--muted);
+  color: var(--text-muted);
   font-size: 1.1rem;
   line-height: 1;
   cursor: pointer;
@@ -412,7 +457,7 @@ h2, h3, h4 {
 }
 
 .btn-remove:hover {
-  color: var(--wine);
+  color: var(--accent-wine-light);
 }
 
 .add-row {
@@ -428,6 +473,7 @@ h2, h3, h4 {
   font-family: var(--font-sans);
   font-size: 0.9rem;
   background: var(--bg);
+  color: var(--text-primary);
 }
 
 .day-select,
@@ -438,7 +484,7 @@ h2, h3, h4 {
   font-family: var(--font-sans);
   font-size: 0.82rem;
   background: var(--bg);
-  color: var(--ink);
+  color: var(--text-primary);
   flex: 0 0 auto;
 }
 
@@ -471,27 +517,27 @@ h2, h3, h4 {
 }
 
 .week-day-card.weekend {
-  background: rgba(122, 59, 46, 0.06);
+  background: rgba(125, 46, 61, 0.1);
 }
 
 .field-label {
   display: block;
   font-size: 0.78rem;
-  color: var(--muted);
+  color: var(--text-muted);
   margin: 0.5rem 0 0.2rem;
 }
 
 .schedule-fixed-note {
   margin: 0.5rem 0 0.2rem;
   font-size: 0.82rem;
-  color: var(--muted);
+  color: var(--text-muted);
   font-style: italic;
 }
 
 .schedule-readonly-text {
   margin: 0.3rem 0 0.2rem;
   font-size: 0.9rem;
-  color: var(--ink);
+  color: var(--text-primary);
   font-weight: 600;
 }
 
@@ -504,7 +550,7 @@ h2, h3, h4 {
   font-size: 0.9rem;
   resize: vertical;
   background: var(--bg);
-  color: var(--ink);
+  color: var(--text-primary);
 }
 
 .table-scroll {
@@ -522,6 +568,7 @@ h2, h3, h4 {
   padding: 0.45rem 0.5rem;
   text-align: center;
   font-size: 0.85rem;
+  color: var(--text-primary);
 }
 
 .habits-table .habit-name {
@@ -530,7 +577,7 @@ h2, h3, h4 {
 }
 
 .habits-table input[type="checkbox"] {
-  accent-color: var(--wine);
+  accent-color: var(--accent-teal);
   width: 1rem;
   height: 1rem;
 }
@@ -553,12 +600,12 @@ h2, h3, h4 {
   font-size: 0.75rem;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  color: var(--muted);
+  color: var(--text-muted);
   border-bottom: 1px solid var(--border);
 }
 
 .calendar-head-cell.weekend {
-  color: var(--wine-dark);
+  color: var(--accent-wine-light);
 }
 
 .calendar-cell {
@@ -566,6 +613,7 @@ h2, h3, h4 {
   min-height: 3.6rem;
   border: 1px solid var(--border);
   background: var(--surface);
+  color: var(--text-primary);
   cursor: pointer;
   display: flex;
   align-items: flex-start;
@@ -575,21 +623,21 @@ h2, h3, h4 {
 }
 
 .calendar-cell:hover {
-  background: rgba(122, 59, 46, 0.06);
+  background: rgba(125, 46, 61, 0.12);
 }
 
 .calendar-cell.outside {
-  color: var(--muted);
-  background: #f4ede1;
+  color: var(--text-muted);
+  background: var(--bg);
 }
 
 .calendar-cell.weekend {
-  background: rgba(122, 59, 46, 0.05);
+  background: rgba(125, 46, 61, 0.08);
 }
 
 .calendar-cell.today .calendar-day-num {
-  background: var(--wine);
-  color: #fff;
+  background: var(--accent-wine);
+  color: var(--text-primary);
   border-radius: 50%;
   width: 1.5rem;
   height: 1.5rem;
@@ -609,13 +657,13 @@ h2, h3, h4 {
   width: 0.45rem;
   height: 0.45rem;
   border-radius: 50%;
-  background: var(--wine);
+  background: var(--accent-wine);
 }
 
 .modal-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(28, 35, 51, 0.55);
+  background: rgba(0, 0, 0, 0.65);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -625,12 +673,14 @@ h2, h3, h4 {
 
 .modal {
   background: var(--surface);
+  border: 1px solid var(--border);
   border-radius: 10px;
   padding: 1.25rem;
   max-width: 420px;
   width: 100%;
   max-height: 85vh;
   overflow-y: auto;
+  color: var(--text-primary);
 }
 
 .modal-actions {
@@ -640,7 +690,7 @@ h2, h3, h4 {
 }
 
 .muted {
-  color: var(--muted);
+  color: var(--text-muted);
   font-size: 0.9rem;
 }
 
@@ -660,8 +710,8 @@ h2, h3, h4 {
 }
 
 @media (max-width: 480px) {
-  header.app-header h1 {
-    font-size: 1.15rem;
+  .masthead-name {
+    font-size: 0.9rem;
   }
 
   .add-row:has(.day-select) {

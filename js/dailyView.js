@@ -66,7 +66,7 @@ window.Agenda = window.Agenda || {};
         "div",
         { class: "add-row" },
         input,
-        el("button", { class: "btn-secondary", onclick: commit }, "Guardar"),
+        el("button", { class: "btn-primary", onclick: commit }, "Guardar"),
         el("button", { class: "btn-secondary", onclick: cancel }, "Cancelar")
       );
     }
@@ -322,7 +322,7 @@ window.Agenda = window.Agenda || {};
       "div",
       { class: "add-row" },
       input,
-      el("button", { class: "btn-secondary", onclick: commit }, "Agregar")
+      el("button", { class: "btn-primary", onclick: commit }, "Agregar")
     );
   }
 

@@ -69,7 +69,7 @@ window.Agenda = window.Agenda || {};
     };
     newMealInput.addEventListener("keydown", (e) => { if (e.key === "Enter") commit(); });
     listCard.appendChild(
-      el("div", { class: "add-row" }, newMealInput, el("button", { class: "btn-secondary", onclick: commit }, "Agregar"))
+      el("div", { class: "add-row" }, newMealInput, el("button", { class: "btn-primary", onclick: commit }, "Agregar"))
     );
 
     container.append(subtitle, listCard);

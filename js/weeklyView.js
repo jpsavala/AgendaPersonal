@@ -58,7 +58,7 @@ window.Agenda = window.Agenda || {};
         "div",
         { class: "add-row" },
         input,
-        el("button", { class: "btn-secondary", onclick: commit }, "Guardar"),
+        el("button", { class: "btn-primary", onclick: commit }, "Guardar"),
         el("button", { class: "btn-secondary", onclick: cancel }, "Cancelar")
       );
     }
@@ -108,7 +108,7 @@ window.Agenda = window.Agenda || {};
         onclick: () => { currentMonday = dateUtils.getMonday(new Date()); addingMealDate = null; render(container); },
       }, "Esta semana"),
       el("button", {
-        class: "btn-secondary",
+        class: "btn-primary",
         onclick: () => {
           if (state.weekHasAnyBlockText(mondayStr)) {
             const confirmed = confirm("Esto va a reemplazar lo que ya tienes capturado en esta semana, ¿continuar?");
@@ -308,7 +308,7 @@ window.Agenda = window.Agenda || {};
         newTrabajoInput,
         newTrabajoDaySelect,
         newTrabajoBlockSelect,
-        el("button", { class: "btn-secondary", onclick: commitTrabajo }, "+ Agregar pendiente")
+        el("button", { class: "btn-primary", onclick: commitTrabajo }, "+ Agregar pendiente")
       )
     );
 

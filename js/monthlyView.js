@@ -108,7 +108,7 @@ window.Agenda = window.Agenda || {};
       { class: "modal" },
       el("h3", null, dateUtils.formatLong(dateUtils.fromISO(dateStr))),
       list.childElementCount ? list : el("p", { class: "muted" }, "Sin eventos para este día."),
-      el("div", { class: "add-row" }, input, el("button", { class: "btn-secondary", onclick: commit }, "Agregar")),
+      el("div", { class: "add-row" }, input, el("button", { class: "btn-primary", onclick: commit }, "Agregar")),
       el("div", { class: "modal-actions" },
         el("button", { class: "btn-secondary", onclick: () => closeModal(overlay) }, "Cerrar")
       )
