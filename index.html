@@ -52,13 +52,22 @@
         syncing: "Sincronizando…",
         synced: "Sincronizado",
         error: "Sin conexión con el servidor",
+        "signed-out": "Iniciar sesión para sincronizar",
       };
       function render(status) {
         el.textContent = labels[status] || "";
         el.className = "sync-status " + status;
       }
-      window.Agenda.firebaseSync.onStatusChange(render);
-      render(window.Agenda.firebaseSync.getStatus());
+      const sync = window.Agenda.firebaseSync;
+      sync.onStatusChange(render);
+      render(sync.getStatus());
+      el.addEventListener("click", () => {
+        if (sync.getUserEmail()) {
+          if (confirm("¿Cerrar sesión de " + sync.getUserEmail() + "?")) sync.signOut();
+        } else {
+          sync.openLogin();
+        }
+      });
     })();
   </script>
 </body>
