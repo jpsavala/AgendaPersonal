@@ -43,6 +43,41 @@ window.Agenda = window.Agenda || {};
     return list;
   }
 
+  function buildGymExtras(dateStr, block) {
+    if (!block.gymStatus) return null;
+    const parts = [];
+    if (block.gymStatus === "done") {
+      parts.push(el("p", { class: "muted" }, "✓ Hecho"));
+    } else if (block.gymStatus === "skipped") {
+      parts.push(el("p", { class: "muted" }, "No realizada"));
+    } else if (block.gymStatus === "pending") {
+      parts.push(
+        el(
+          "div",
+          { class: "gym-actions" },
+          el("span", { class: "muted" }, "¿Entrenaste hoy?"),
+          el("button", { class: "btn-secondary", onclick: () => state.markGymSkipped(dateStr) }, "No"),
+          el("button", { class: "btn-primary", onclick: () => state.markGymDone(dateStr) }, "Sí")
+        )
+      );
+    }
+    const todayStr = dateUtils.toISO(new Date());
+    if (dateStr > todayStr) {
+      const unavailable = state.isGymUnavailable(dateStr);
+      parts.push(
+        el(
+          "button",
+          {
+            class: "link-btn",
+            onclick: () => { state.setGymUnavailable(dateStr, !unavailable); render(containerRef); },
+          },
+          unavailable ? 'Quitar "no disponible"' : "Marcar día como no disponible"
+        )
+      );
+    }
+    return parts;
+  }
+
   function buildMealSelector(dateStr, currentText) {
     if (addingMeal) {
       const input = el("input", { type: "text", class: "add-input", placeholder: "Nombre de la comida nueva..." });
@@ -205,12 +240,14 @@ window.Agenda = window.Agenda || {};
             { class: "schedule-block-head" },
             block.time ? el("span", { class: "schedule-time" }, block.time) : null,
             el("span", { class: "schedule-label" }, block.label),
-            el("input", {
-              type: "checkbox",
-              class: "schedule-check",
-              checked: block.done ? "checked" : null,
-              onchange: () => state.toggleBlockDone(dateStr, block.id),
-            }),
+            block.gymStatus
+              ? null
+              : el("input", {
+                  type: "checkbox",
+                  class: "schedule-check",
+                  checked: block.done ? "checked" : null,
+                  onchange: () => state.toggleBlockDone(dateStr, block.id),
+                }),
           ),
           block.fixed
             ? (block.text ? el("p", { class: "schedule-readonly-text" }, block.text) : null)
@@ -223,7 +260,8 @@ window.Agenda = window.Agenda || {};
                 value: block.text,
                 oninput: (e) => state.setBlockText(dateStr, block.id, e.target.value),
               }),
-          OFFICE_BLOCK_IDS.includes(block.id) ? buildOfficePendientesList(dateStr, block.id) : null
+          OFFICE_BLOCK_IDS.includes(block.id) ? buildOfficePendientesList(dateStr, block.id) : null,
+          block.id === "gimnasio" ? buildGymExtras(dateStr, block) : null
         )
       );
     });
@@ -286,14 +324,23 @@ window.Agenda = window.Agenda || {};
       weekendSection = el("div", { class: "card" }, el("h3", null, "Pendientes del fin de semana"));
       const weekendList = el("div", { class: "check-list" });
       state.getWeekendChecklist(dateStr).forEach((item) => {
+        const gymDone = item.gymStatus === "done";
         weekendList.appendChild(
           el(
             "label",
-            { class: "check-row" + (item.done ? " done" : "") },
+            { class: "check-row" + (item.done || gymDone ? " done" : "") },
             el("input", {
               type: "checkbox",
-              checked: item.done ? "checked" : null,
-              onchange: () => state.toggleWeekendItem(dateStr, item.id),
+              checked: item.done || gymDone ? "checked" : null,
+              disabled: item.gymStatus && item.gymStatus !== "pending" ? "disabled" : null,
+              onchange: (e) => {
+                if (item.gymStatus === "pending") {
+                  if (e.target.checked) state.markGymDone(dateStr);
+                  else e.target.checked = true; // no hay "deshacer" una vez confirmado
+                  return;
+                }
+                state.toggleWeekendItem(dateStr, item.id);
+              },
             }),
             el("span", null, item.text),
             el("button", {

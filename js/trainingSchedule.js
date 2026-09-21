@@ -1,32 +1,16 @@
 /*
- * Tabla fija de gimnasio y corrida. Mientras una fecha caiga dentro del
- * rango programado, el bloque correspondiente se vuelve de solo lectura
- * (texto calculado); fuera de rango, las funciones devuelven `undefined`
- * y el bloque se queda editable como antes.
+ * Tabla fija de corrida (por semana calendario específica). Mientras una
+ * fecha caiga dentro del rango programado, el bloque correspondiente se
+ * vuelve de solo lectura (texto calculado); fuera de rango, las
+ * funciones devuelven `undefined` y el bloque se queda editable como
+ * antes.
+ *
+ * El gimnasio YA NO vive acá: se calcula con el motor de cola + puntero
+ * de js/scheduleQueue.js (ver getGymResolution en js/state.js), porque
+ * sigue el orden real de lo hecho en vez de una fecha fija.
  */
 window.Agenda = window.Agenda || {};
 (function (ns) {
-  // ---------- Gimnasio (entre semana, se repite igual cada semana) ----------
-  const GYM_LABELS = {
-    mon: "Torso",
-    tue: "Pierna - Glúteo/Femoral",
-    wed: "Empuje",
-    thu: "Pierna - Cuádriceps",
-    fri: "Tracción",
-  };
-  const GYM_START = "2026-09-21";
-  const GYM_END = "2026-10-18"; // último día del rango programado (semana de descarga incluida)
-  const GYM_DESCARGA_START = "2026-10-12";
-
-  function getGymText(dateStr) {
-    if (dateStr < GYM_START || dateStr > GYM_END) return undefined;
-    const dayKey = ns.dateUtils.DAY_KEYS[ns.dateUtils.isoWeekday(ns.dateUtils.fromISO(dateStr))];
-    const base = GYM_LABELS[dayKey];
-    if (!base) return undefined; // fin de semana: no aplica a este bloque
-    const isDescarga = dateStr >= GYM_DESCARGA_START;
-    return isDescarga ? `${base} (descarga)` : base;
-  }
-
   // ---------- Corrida (por semana calendario específica) ----------
   // Clave = lunes ISO de esa semana.
   const RUN_WEEKS = {
@@ -71,5 +55,5 @@ window.Agenda = window.Agenda || {};
     return week ? week.sun : undefined;
   }
 
-  ns.trainingSchedule = { getGymText, getRunText, getSundayRunText };
+  ns.trainingSchedule = { getRunText, getSundayRunText };
 })(window.Agenda);

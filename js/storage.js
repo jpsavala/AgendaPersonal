@@ -22,6 +22,7 @@ window.Agenda = window.Agenda || {};
       monthMeta: {},
       quoteBag: { order: [], pointer: 0 },
       wordBag: { order: [], pointer: 0 },
+      gymQueue: null,
     };
   }
 

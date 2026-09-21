@@ -150,10 +150,126 @@ window.Agenda = window.Agenda || {};
     });
   }
 
+  // ---------- Gimnasio: cola de 20 sesiones (sin fecha) + puntero ----------
+  // Reemplaza el horario fijo por fecha (ver js/trainingSchedule.js,
+  // ahora solo para corrida): las mismas 20 sesiones de antes (3 semanas
+  // normales + 1 de descarga), pero en una lista ordenada sin fecha
+  // asociada. El motor genérico vive en js/scheduleQueue.js.
+  const GYM_ROUND = ["Torso", "Pierna - Glúteo/Femoral", "Empuje", "Pierna - Cuádriceps", "Tracción"];
+  const GYM_QUEUE_SESSIONS = [
+    ...GYM_ROUND,
+    ...GYM_ROUND,
+    ...GYM_ROUND,
+    ...GYM_ROUND.map((s) => `${s} (descarga)`),
+  ];
+
+  // Migración única: convierte el horario fijo anterior en el puntero
+  // inicial, contando cuántas sesiones (lunes a viernes) ya habrían
+  // pasado entre el inicio de ese horario y "hoy" (el día en que carga
+  // esta versión), para no perder continuidad. Es segura de correr en
+  // cada carga: si ya existe data.gymQueue, no hace nada.
+  function migrateGymQueue() {
+    if (data.gymQueue) return;
+    const LEGACY_GYM_START = "2026-09-21"; // lunes de la semana 1 del horario fijo anterior
+    const todayStr = toISO(new Date());
+    const startStr = todayStr < LEGACY_GYM_START ? LEGACY_GYM_START : todayStr;
+    let pointer = 0;
+    let cursor = ns.dateUtils.fromISO(LEGACY_GYM_START);
+    while (toISO(cursor) < startStr && pointer < GYM_QUEUE_SESSIONS.length) {
+      if (ns.dateUtils.isoWeekday(cursor) <= 4) pointer += 1; // lunes(0)...viernes(4)
+      cursor = ns.dateUtils.addDays(cursor, 1);
+    }
+    data.gymQueue = {
+      pointer: Math.min(pointer, GYM_QUEUE_SESSIONS.length),
+      seedAnchor: startStr,
+      resolutions: {},
+      unavailable: {},
+    };
+  }
+
+  // Cuenta cuántos días hábiles (lunes a viernes) hay entre dos fechas,
+  // ambas incluidas. Cálculo puramente de calendario, sin mirar
+  // resoluciones.
+  function countWeekdaysBetween(fromStr, throughStr) {
+    if (fromStr > throughStr) return 0;
+    let count = 0;
+    let cursor = ns.dateUtils.fromISO(fromStr);
+    const through = ns.dateUtils.fromISO(throughStr);
+    while (cursor <= through) {
+      if (ns.dateUtils.isoWeekday(cursor) < 5) count += 1;
+      cursor = ns.dateUtils.addDays(cursor, 1);
+    }
+    return count;
+  }
+
+  // Días hábiles para la cola de gimnasio: lunes a viernes siempre;
+  // sábado solo si, para cuando la simulación llega a él, todavía hay
+  // menos sesiones consumidas (idxSoFar) que días hábiles ya pasaron en
+  // total desde que arrancó este sistema (es decir, hay atraso que
+  // recuperar, sin importar de qué semana venga). Se genera una función
+  // nueva por cada simulación: arranca su contador ya con los días
+  // hábiles previos al punto donde retoma la simulación (ver
+  // scheduleQueue.anchorOf), y de ahí en adelante lo va sumando día a
+  // día en el mismo orden en que los recorre resolve().
+  function makeIsValidGymDay() {
+    const anchor = ns.scheduleQueue.anchorOf(data.gymQueue);
+    const dayBeforeAnchor = toISO(ns.dateUtils.addDays(ns.dateUtils.fromISO(anchor), -1));
+    let weekdaysSoFar = countWeekdaysBetween(data.gymQueue.seedAnchor, dayBeforeAnchor);
+    return function (dateStr, idxSoFar) {
+      const wd = ns.dateUtils.isoWeekday(ns.dateUtils.fromISO(dateStr));
+      if (wd === 6) return false; // domingo: descanso siempre
+      if (wd < 5) {
+        weekdaysSoFar += 1;
+        return true; // lunes a viernes: siempre hábil
+      }
+      return idxSoFar < weekdaysSoFar; // sábado: solo si hay atraso
+    };
+  }
+
+  function getGymResolution(dateStr) {
+    if (!data.gymQueue) return null;
+    const todayStr = toISO(new Date());
+    return ns.scheduleQueue.resolve(data.gymQueue, GYM_QUEUE_SESSIONS, dateStr, todayStr, makeIsValidGymDay());
+  }
+
+  function markGymDone(dateStr) {
+    if (!data.gymQueue) return;
+    const todayStr = toISO(new Date());
+    if (ns.scheduleQueue.markDone(data.gymQueue, GYM_QUEUE_SESSIONS, dateStr, todayStr, makeIsValidGymDay())) notify();
+  }
+
+  function markGymSkipped(dateStr) {
+    if (!data.gymQueue) return;
+    const todayStr = toISO(new Date());
+    if (ns.scheduleQueue.markSkipped(data.gymQueue, GYM_QUEUE_SESSIONS, dateStr, todayStr, makeIsValidGymDay())) notify();
+  }
+
+  function isGymUnavailable(dateStr) {
+    return !!(data.gymQueue && data.gymQueue.unavailable[dateStr]);
+  }
+
+  // Solo tiene sentido marcar fechas futuras (ver UI): no valida acá para
+  // no acoplar esta capa de datos con "hoy" más de lo necesario.
+  function setGymUnavailable(dateStr, unavailable) {
+    if (!data.gymQueue) return;
+    ns.scheduleQueue.setUnavailable(data.gymQueue, dateStr, unavailable);
+    notify();
+  }
+
+  // Igual que getSundayRunText: refleja de solo lectura, en el pendiente
+  // "Gimnasio" del checklist de fin de semana, la sesión atrasada que le
+  // tocaría a este sábado (si hay alguna). undefined si no es sábado o si
+  // no hay atraso ese sábado (se deja el texto manual de siempre).
+  function getSaturdayGymResolution(dateStr) {
+    if (ns.dateUtils.isoWeekday(ns.dateUtils.fromISO(dateStr)) !== 5) return undefined;
+    return getGymResolution(dateStr) || undefined;
+  }
+
   migrateToWeekdayTemplates();
   migrateWeekdayTemplatesToCurrentWeek();
   purgeFixedBlockText();
   migrateNocheBlockSplit();
+  migrateGymQueue();
   persist();
 
   function onChange(fn) {
@@ -343,12 +459,12 @@ window.Agenda = window.Agenda || {};
     return getWeekBlockTemplate(getMondayKey(dateStr), getWeekdayKey(dateStr))[blockId] || "";
   }
 
-  // Gimnasio y corrida entre semana: mientras la fecha caiga dentro del
-  // rango programado en trainingSchedule.js, el bloque se vuelve de
-  // solo lectura con el texto calculado; fuera de rango, se comporta
-  // como antes (editable, texto por plantilla semanal).
+  // Corrida entre semana: mientras la fecha caiga dentro del rango
+  // programado en trainingSchedule.js, el bloque se vuelve de solo
+  // lectura con el texto calculado; fuera de rango, se comporta como
+  // antes (editable, texto por plantilla semanal). El gimnasio tiene su
+  // propia resolución vía la cola + puntero (ver getGymResolution).
   function getAutoBlockOverride(def, dateStr) {
-    if (def.id === "gimnasio") return ns.trainingSchedule.getGymText(dateStr);
     if (def.id === "correr") return ns.trainingSchedule.getRunText(dateStr);
     return undefined;
   }
@@ -359,6 +475,18 @@ window.Agenda = window.Agenda || {};
     return defs.map((def) => {
       const done = !!(day.blocks[def.id] && day.blocks[def.id].done);
       if (def.marker) return { ...def, text: "", done };
+
+      if (def.id === "gimnasio") {
+        if (isGymUnavailable(dateStr)) {
+          return { ...def, fixed: true, text: "No disponible", done: false, gymStatus: "unavailable" };
+        }
+        const r = getGymResolution(dateStr);
+        if (r) {
+          return { ...def, fixed: true, text: r.session, done: r.status === "done", gymStatus: r.status };
+        }
+        // Sin datos (antes de que arrancara este sistema, o cola ya
+        // agotada): sigue igual que antes, editable manual.
+      }
 
       const override = getAutoBlockOverride(def, dateStr);
       if (override !== undefined) {
@@ -375,15 +503,24 @@ window.Agenda = window.Agenda || {};
 
   // El ítem "Correr" del checklist de fin de semana refleja, de solo
   // lectura, la distancia programada de ese domingo (si la fecha cae
-  // dentro del rango de trainingSchedule.js). Es una transformación al
+  // dentro del rango de trainingSchedule.js). El ítem "Gimnasio" refleja,
+  // igual de solo lectura, la sesión atrasada que le toca a ese sábado
+  // (si hay alguna pendiente de recuperar). Son transformaciones al
   // vuelo, para no persistir el texto calculado en el propio dato.
   function getWeekendChecklist(dateStr) {
     const items = getDay(dateStr).weekendChecklist;
     const sundayRun = ns.trainingSchedule.getSundayRunText(dateStr);
-    if (sundayRun === undefined) return items;
+    const saturdayGym = getSaturdayGymResolution(dateStr);
     return items.map((item) => {
       const isCorrerItem = item.key === "correr" || (item.key === undefined && item.text === "Correr");
-      return isCorrerItem ? { ...item, text: sundayRun } : item;
+      if (isCorrerItem && sundayRun !== undefined) return { ...item, text: sundayRun };
+
+      const isGymItem = item.text && item.text.indexOf("Gimnasio") === 0;
+      if (isGymItem && saturdayGym) {
+        const suffix = saturdayGym.status === "done" ? " — hecho" : saturdayGym.status === "skipped" ? " — no realizada" : "";
+        return { ...item, text: `Gimnasio (atrasado): ${saturdayGym.session}${suffix}`, gymStatus: saturdayGym.status };
+      }
+      return item;
     });
   }
 
@@ -720,6 +857,10 @@ window.Agenda = window.Agenda || {};
     weekHasAnyBlockText,
     replicatePreviousWeek,
     toggleBlockDone,
+    markGymDone,
+    markGymSkipped,
+    isGymUnavailable,
+    setGymUnavailable,
     getWeekendChecklist,
     addWeekendItem,
     removeWeekendItem,

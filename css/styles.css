@@ -820,6 +820,30 @@ h2, h3, h4 {
   color: var(--accent-green);
 }
 
+.gym-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.4rem;
+}
+
+.link-btn {
+  display: block;
+  margin-top: 0.4rem;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-family: var(--font-sans);
+  font-size: 0.78rem;
+  text-decoration: underline;
+  cursor: pointer;
+  padding: 0;
+}
+
+.link-btn:hover {
+  color: var(--accent-green);
+}
+
 @media (min-width: 720px) {
   .daily-grid {
     grid-template-columns: 1fr 1fr;
