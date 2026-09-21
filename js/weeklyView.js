@@ -12,6 +12,8 @@ window.Agenda = window.Agenda || {};
     { value: "tarde_oficina", label: "16:30–19:00" },
   ];
 
+  const DAY_LETTERS = ["L", "M", "X", "J", "V", "S", "D"];
+
   function el(tag, attrs, ...children) {
     const node = document.createElement(tag);
     Object.entries(attrs || {}).forEach(([k, v]) => {
@@ -33,6 +35,23 @@ window.Agenda = window.Agenda || {};
     });
     select.value = selectedValue || OFFICE_BLOCK_OPTIONS[0].value;
     return select;
+  }
+
+  // Grupo de casillas L-D para asignar un pendiente a uno o varios días.
+  // Si onToggle se omite (formulario de "agregar"), las casillas solo
+  // guardan su propio estado nativo, a leer al confirmar.
+  function buildDayCheckboxGroup(selectedDayKeys, onToggle) {
+    const wrap = el("div", { class: "day-checkbox-group" });
+    dateUtils.DAY_KEYS.forEach((dk, i) => {
+      const checkbox = el("input", {
+        type: "checkbox",
+        value: dk,
+        checked: selectedDayKeys.includes(dk) ? "checked" : null,
+        onchange: onToggle ? () => onToggle(dk) : null,
+      });
+      wrap.appendChild(el("label", { class: "day-chip", title: dateUtils.DAY_LABELS_LONG[i] }, checkbox, DAY_LETTERS[i]));
+    });
+    return wrap;
   }
 
   function buildMealSelector(dateStr, currentText) {
@@ -249,15 +268,9 @@ window.Agenda = window.Agenda || {};
     pendientesCard.appendChild(el("h4", { class: "pendientes-subtitle" }, "Trabajo"));
     const trabajoList = el("div", { class: "check-list" });
     state.getWeekTrabajoPendientes(mondayStr).forEach((item) => {
-      const daySelect = el("select", {
-        class: "day-select",
-        onchange: (e) => state.setWeekTrabajoPendienteDay(mondayStr, item.id, e.target.value),
-      });
-      daySelect.appendChild(el("option", { value: "" }, "Sin asignar"));
-      dateUtils.DAY_KEYS.forEach((dk, i) => {
-        daySelect.appendChild(el("option", { value: dk }, dateUtils.DAY_LABELS_LONG[i]));
-      });
-      daySelect.value = item.dayKey || "";
+      const dayCheckboxes = buildDayCheckboxGroup(item.dayKeys, (dk) =>
+        state.toggleWeekTrabajoPendienteDay(mondayStr, item.id, dk)
+      );
 
       const blockSelect = buildBlockSelect(item.blockId, (e) =>
         state.setWeekTrabajoPendienteBlock(mondayStr, item.id, e.target.value)
@@ -266,14 +279,14 @@ window.Agenda = window.Agenda || {};
       trabajoList.appendChild(
         el(
           "div",
-          { class: "check-row" + (item.done ? " done" : "") },
+          { class: "check-row trabajo-row" + (item.done ? " done" : "") },
           el("input", {
             type: "checkbox",
             checked: item.done ? "checked" : null,
             onchange: () => state.toggleWeekTrabajoPendiente(mondayStr, item.id),
           }),
           el("span", null, item.text),
-          daySelect,
+          dayCheckboxes,
           blockSelect,
           el("button", {
             class: "btn-remove",
@@ -286,17 +299,14 @@ window.Agenda = window.Agenda || {};
     pendientesCard.appendChild(trabajoList);
 
     const newTrabajoInput = el("input", { type: "text", class: "add-input", placeholder: "Nuevo pendiente de trabajo..." });
-    const newTrabajoDaySelect = el("select", { class: "day-select" });
-    newTrabajoDaySelect.appendChild(el("option", { value: "" }, "Sin asignar"));
-    dateUtils.DAY_KEYS.forEach((dk, i) => {
-      newTrabajoDaySelect.appendChild(el("option", { value: dk }, dateUtils.DAY_LABELS_LONG[i]));
-    });
+    const newTrabajoDayCheckboxes = buildDayCheckboxGroup([]);
     const newTrabajoBlockSelect = buildBlockSelect(OFFICE_BLOCK_OPTIONS[0].value);
     const commitTrabajo = () => {
       if (newTrabajoInput.value.trim()) {
-        state.addWeekTrabajoPendiente(mondayStr, newTrabajoInput.value, newTrabajoDaySelect.value, newTrabajoBlockSelect.value);
+        const selectedDays = Array.from(newTrabajoDayCheckboxes.querySelectorAll("input:checked")).map((cb) => cb.value);
+        state.addWeekTrabajoPendiente(mondayStr, newTrabajoInput.value, selectedDays, newTrabajoBlockSelect.value);
         newTrabajoInput.value = "";
-        newTrabajoDaySelect.value = "";
+        newTrabajoDayCheckboxes.querySelectorAll("input").forEach((cb) => { cb.checked = false; });
         newTrabajoBlockSelect.value = OFFICE_BLOCK_OPTIONS[0].value;
       }
     };
@@ -304,9 +314,9 @@ window.Agenda = window.Agenda || {};
     pendientesCard.appendChild(
       el(
         "div",
-        { class: "add-row" },
+        { class: "add-row trabajo-add-row" },
         newTrabajoInput,
-        newTrabajoDaySelect,
+        newTrabajoDayCheckboxes,
         newTrabajoBlockSelect,
         el("button", { class: "btn-primary", onclick: commitTrabajo }, "+ Agregar pendiente")
       )

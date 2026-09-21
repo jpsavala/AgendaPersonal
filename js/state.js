@@ -133,9 +133,25 @@ window.Agenda = window.Agenda || {};
     });
   }
 
+  // El bloque único de las 20:00 en adelante ("noche") se dividió en un
+  // bloque fijo "Cenar y bañarme" (sin texto) y un bloque nuevo editable
+  // "libre_noche" (21:30-22:10). El texto que hubiera quedado bajo
+  // "noche" se conserva como contenido inicial de ese bloque nuevo.
+  function migrateNocheBlockSplit() {
+    Object.values(data.weekBlocks || {}).forEach((week) => {
+      Object.values(week).forEach((dayFields) => {
+        if (dayFields.noche !== undefined) {
+          if (!dayFields.libre_noche) dayFields.libre_noche = dayFields.noche;
+          delete dayFields.noche;
+        }
+      });
+    });
+  }
+
   migrateToWeekdayTemplates();
   migrateWeekdayTemplatesToCurrentWeek();
   purgeFixedBlockText();
+  migrateNocheBlockSplit();
   persist();
 
   function onChange(fn) {
@@ -455,8 +471,14 @@ window.Agenda = window.Agenda || {};
     if (!week.pendientesPersonal) week.pendientesPersonal = [];
     // Compatibilidad con pendientes guardados antes de poder elegir
     // bloque: antes siempre se mostraban en el de 10:00-14:00.
+    // Compatibilidad con pendientes guardados antes de poder asignar
+    // varios días: el día único se convierte en una lista de un solo día.
     week.pendientesTrabajo.forEach((p) => {
       if (!OFFICE_BLOCK_IDS.includes(p.blockId)) p.blockId = DEFAULT_OFFICE_BLOCK_ID;
+      if (!Array.isArray(p.dayKeys)) {
+        p.dayKeys = p.dayKey ? [p.dayKey] : [];
+        delete p.dayKey;
+      }
     });
     return week;
   }
@@ -467,22 +489,24 @@ window.Agenda = window.Agenda || {};
   const DEFAULT_OFFICE_BLOCK_ID = "oficina_manana";
 
   // Cada pendiente pertenece a una sola semana específica y, de forma
-  // opcional, a un día de esa semana (dayKey null = "sin asignar"), más
-  // el bloque de oficina de ese día (10:00-14:00 o 16:30-19:00) donde se
-  // debe mostrar. Es el mismo dato en la vista semanal y la diaria, así
-  // que marcar cumplido en una se refleja en la otra.
+  // opcional, a uno o varios días de esa semana (dayKeys vacío = "sin
+  // asignar"), más el bloque de oficina de esos días (10:00-14:00 o
+  // 16:30-19:00) donde se debe mostrar. Es el mismo dato en la vista
+  // semanal y la diaria, así que marcar cumplido en una se refleja en
+  // la otra, y aparece en el bloque de CADA día asignado.
   function getWeekTrabajoPendientes(mondayStr) {
     return getWeek(mondayStr).pendientesTrabajo;
   }
 
-  function addWeekTrabajoPendiente(mondayStr, text, dayKey, blockId) {
+  function addWeekTrabajoPendiente(mondayStr, text, dayKeys, blockId) {
     const trimmed = text.trim();
     if (!trimmed) return;
+    const keys = Array.isArray(dayKeys) ? dayKeys.filter(Boolean) : dayKeys ? [dayKeys] : [];
     getWeek(mondayStr).pendientesTrabajo.push({
       id: uid("wt"),
       text: trimmed,
       done: false,
-      dayKey: dayKey || null,
+      dayKeys: keys,
       blockId: OFFICE_BLOCK_IDS.includes(blockId) ? blockId : DEFAULT_OFFICE_BLOCK_ID,
     });
     notify();
@@ -501,10 +525,13 @@ window.Agenda = window.Agenda || {};
     notify();
   }
 
-  function setWeekTrabajoPendienteDay(mondayStr, id, dayKey) {
+  function toggleWeekTrabajoPendienteDay(mondayStr, id, dayKey) {
     const week = getWeek(mondayStr);
     const p = week.pendientesTrabajo.find((p) => p.id === id);
-    if (p) p.dayKey = dayKey || null;
+    if (!p) return;
+    const idx = p.dayKeys.indexOf(dayKey);
+    if (idx === -1) p.dayKeys.push(dayKey);
+    else p.dayKeys.splice(idx, 1);
     notify();
   }
 
@@ -520,7 +547,9 @@ window.Agenda = window.Agenda || {};
   // que pertenece esa fecha.
   function getOfficePendientes(dateStr, blockId) {
     const dayKey = getWeekdayKey(dateStr);
-    return getWeek(getMondayKey(dateStr)).pendientesTrabajo.filter((p) => p.dayKey === dayKey && p.blockId === blockId);
+    return getWeek(getMondayKey(dateStr)).pendientesTrabajo.filter(
+      (p) => p.dayKeys.includes(dayKey) && p.blockId === blockId
+    );
   }
 
   function toggleOfficePendiente(dateStr, id) {
@@ -602,7 +631,7 @@ window.Agenda = window.Agenda || {};
     addWeekTrabajoPendiente,
     removeWeekTrabajoPendiente,
     toggleWeekTrabajoPendiente,
-    setWeekTrabajoPendienteDay,
+    toggleWeekTrabajoPendienteDay,
     setWeekTrabajoPendienteBlock,
     getOfficePendientes,
     toggleOfficePendiente,

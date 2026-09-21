@@ -474,7 +474,6 @@ h2, h3, h4 {
   color: var(--text-primary);
 }
 
-.day-select,
 .block-select {
   padding: 0.4rem 0.5rem;
   border: 1px solid var(--border);
@@ -484,6 +483,45 @@ h2, h3, h4 {
   background: var(--bg);
   color: var(--text-primary);
   flex: 0 0 auto;
+}
+
+.day-checkbox-group {
+  display: flex;
+  gap: 0.25rem;
+  flex-wrap: wrap;
+  flex: 0 0 auto;
+}
+
+.day-chip {
+  position: relative;
+  width: 1.7rem;
+  height: 1.7rem;
+  flex-shrink: 0;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  user-select: none;
+}
+
+.day-chip input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  margin: 0;
+  cursor: pointer;
+}
+
+.day-chip:has(input:checked) {
+  background: var(--accent-green);
+  border-color: var(--accent-green);
+  color: var(--bg);
 }
 
 .pendientes-subtitle {
@@ -712,19 +750,19 @@ h2, h3, h4 {
     font-size: 0.9rem;
   }
 
-  .add-row:has(.day-select) {
+  .add-row:has(.day-checkbox-group) {
     flex-wrap: wrap;
   }
 
-  .add-row:has(.day-select) .add-input {
+  .add-row:has(.day-checkbox-group) .add-input {
     flex: 1 1 100%;
   }
 
-  .check-row:has(.day-select) {
+  .check-row:has(.day-checkbox-group) {
     flex-wrap: wrap;
   }
 
-  .check-row:has(.day-select) span {
+  .check-row:has(.day-checkbox-group) span {
     flex: 1 1 auto;
   }
 

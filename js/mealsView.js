@@ -25,12 +25,6 @@ window.Agenda = window.Agenda || {};
   function render(container) {
     container.innerHTML = "";
 
-    const subtitle = el(
-      "p",
-      { class: "view-subtitle" },
-      "Tu repertorio de comidas. Se usa para elegir rápido en el bloque “Comida” de la agenda."
-    );
-
     const listCard = el("div", { class: "card" }, el("h3", null, "Mis comidas"));
     const meals = state.getMealLibrary();
 
@@ -72,7 +66,7 @@ window.Agenda = window.Agenda || {};
       el("div", { class: "add-row" }, newMealInput, el("button", { class: "btn-primary", onclick: commit }, "Agregar"))
     );
 
-    container.append(subtitle, listCard);
+    container.append(listCard);
   }
 
   ns.mealsView = {

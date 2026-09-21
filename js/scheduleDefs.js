@@ -39,11 +39,8 @@ window.Agenda = window.Agenda || {};
 
   const FIXED_END = [
     { id: "correr", time: "Después de 19:00", label: "Correr" },
-    {
-      id: "noche",
-      time: "20:00 en adelante",
-      label: "Cenar, bañarme y bloque libre (trabajo / lectura / ocio)",
-    },
+    { id: "cena", time: "20:00–21:20", label: "Cenar y bañarme", fixed: true },
+    { id: "libre_noche", time: "21:30–22:10", label: "Bloque libre" },
   ];
 
   function getBlocks(cocina) {
