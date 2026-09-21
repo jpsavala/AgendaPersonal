@@ -1,13 +1,12 @@
 :root {
-  --bg: #121317;
-  --surface: #1c1e24;
-  --text-primary: #edebe6;
-  --text-muted: #8a8c93;
-  --border: #2a2c33;
-  --accent-wine: #7d2e3d;
-  --accent-wine-light: #b5586a;
-  --accent-teal: #2e6f6e;
-  --accent-purple: #6b4e8e;
+  --bg: #f3eedf;
+  --surface: #eae2c8;
+  --text-primary: #1f2a1d;
+  --text-muted: #6b6650;
+  --border: #d8cfae;
+  --accent-green: #1b4332;
+  --accent-green-light: #4c7a5d;
+  --accent-gold: #a98b4a;
   --font-serif: Georgia, "Times New Roman", serif;
   --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
 }
@@ -47,14 +46,14 @@ header.app-header {
   width: 2.2rem;
   height: 2.2rem;
   border-radius: 50%;
-  border: 1px solid var(--accent-wine);
+  border: 1px solid var(--accent-green);
   display: flex;
   align-items: center;
   justify-content: center;
   font-family: var(--font-serif);
   font-size: 0.85rem;
   font-weight: 700;
-  color: var(--accent-wine-light);
+  color: var(--accent-green);
   letter-spacing: 0.02em;
 }
 
@@ -84,14 +83,14 @@ nav.tabs {
 }
 
 .tab-button:hover {
-  border-color: var(--accent-wine);
-  color: var(--text-primary);
+  border-color: var(--accent-green);
+  color: var(--accent-green);
 }
 
 .tab-button.active {
-  background: var(--accent-wine);
-  border-color: var(--accent-wine);
-  color: var(--text-primary);
+  background: var(--accent-green);
+  border-color: var(--accent-green);
+  color: var(--bg);
 }
 
 main {
@@ -139,7 +138,7 @@ h2, h3, h4 {
 }
 
 .btn-icon:hover {
-  border-color: var(--accent-wine);
+  border-color: var(--accent-green);
 }
 
 .btn-secondary {
@@ -154,14 +153,14 @@ h2, h3, h4 {
 }
 
 .btn-secondary:hover {
-  border-color: var(--accent-wine);
-  color: var(--accent-wine-light);
+  border-color: var(--accent-green);
+  color: var(--accent-green);
 }
 
 .btn-primary {
-  background: var(--accent-wine);
-  border: 1px solid var(--accent-wine);
-  color: var(--text-primary);
+  background: var(--accent-green);
+  border: 1px solid var(--accent-green);
+  color: var(--bg);
   border-radius: 8px;
   padding: 0.5rem 0.9rem;
   cursor: pointer;
@@ -171,8 +170,7 @@ h2, h3, h4 {
 }
 
 .btn-primary:hover {
-  background: var(--accent-wine-light);
-  border-color: var(--accent-wine-light);
+  filter: brightness(1.15);
 }
 
 .date-picker {
@@ -182,12 +180,12 @@ h2, h3, h4 {
   border-radius: 8px;
   background: var(--surface);
   color: var(--text-primary);
-  color-scheme: dark;
+  color-scheme: light;
 }
 
 .quote-box {
   background: var(--surface);
-  border-left: 4px solid var(--accent-purple);
+  border-left: 4px solid var(--accent-gold);
   border-radius: 8px;
   padding: 0.9rem 1.1rem;
   margin-bottom: 1.25rem;
@@ -198,7 +196,7 @@ h2, h3, h4 {
   font-size: 0.75rem;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  color: var(--accent-purple);
+  color: var(--accent-gold);
   margin-bottom: 0.25rem;
 }
 
@@ -258,13 +256,13 @@ h2, h3, h4 {
 }
 
 .toggle-btn:hover {
-  border-color: var(--accent-wine);
+  border-color: var(--accent-green);
 }
 
 .toggle-btn.active {
-  background: var(--accent-wine);
-  border-color: var(--accent-wine);
-  color: var(--text-primary);
+  background: var(--accent-green);
+  border-color: var(--accent-green);
+  color: var(--bg);
 }
 
 .schedule {
@@ -283,8 +281,8 @@ h2, h3, h4 {
 }
 
 .schedule-block.highlight {
-  border-left-color: var(--accent-wine);
-  background: rgba(125, 46, 61, 0.12);
+  border-left-color: var(--accent-green);
+  background: rgba(27, 67, 50, 0.1);
 }
 
 .schedule-block-head {
@@ -298,7 +296,7 @@ h2, h3, h4 {
 .schedule-time {
   flex: 0 0 auto;
   font-size: 0.8rem;
-  color: var(--accent-wine-light);
+  color: var(--accent-green);
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
@@ -314,7 +312,7 @@ h2, h3, h4 {
 .schedule-check {
   width: 1.1rem;
   height: 1.1rem;
-  accent-color: var(--accent-teal);
+  accent-color: var(--accent-green-light);
   flex-shrink: 0;
 }
 
@@ -331,7 +329,7 @@ h2, h3, h4 {
 
 .schedule-input:focus {
   outline: none;
-  border-bottom: 1px solid var(--accent-wine);
+  border-bottom: 1px solid var(--accent-green);
 }
 
 .meal-select {
@@ -371,7 +369,7 @@ h2, h3, h4 {
 
 .meal-name-input:focus {
   outline: none;
-  border-color: var(--accent-wine);
+  border-color: var(--accent-green);
 }
 
 .schedule-marker {
@@ -438,7 +436,7 @@ h2, h3, h4 {
 .check-row input[type="checkbox"] {
   width: 1.05rem;
   height: 1.05rem;
-  accent-color: var(--accent-teal);
+  accent-color: var(--accent-green-light);
   flex-shrink: 0;
 }
 
@@ -457,7 +455,7 @@ h2, h3, h4 {
 }
 
 .btn-remove:hover {
-  color: var(--accent-wine-light);
+  color: var(--accent-green);
 }
 
 .add-row {
@@ -517,7 +515,7 @@ h2, h3, h4 {
 }
 
 .week-day-card.weekend {
-  background: rgba(125, 46, 61, 0.1);
+  background: rgba(27, 67, 50, 0.07);
 }
 
 .field-label {
@@ -577,7 +575,7 @@ h2, h3, h4 {
 }
 
 .habits-table input[type="checkbox"] {
-  accent-color: var(--accent-teal);
+  accent-color: var(--accent-green-light);
   width: 1rem;
   height: 1rem;
 }
@@ -605,7 +603,7 @@ h2, h3, h4 {
 }
 
 .calendar-head-cell.weekend {
-  color: var(--accent-wine-light);
+  color: var(--accent-green);
 }
 
 .calendar-cell {
@@ -623,7 +621,7 @@ h2, h3, h4 {
 }
 
 .calendar-cell:hover {
-  background: rgba(125, 46, 61, 0.12);
+  background: rgba(27, 67, 50, 0.08);
 }
 
 .calendar-cell.outside {
@@ -632,12 +630,12 @@ h2, h3, h4 {
 }
 
 .calendar-cell.weekend {
-  background: rgba(125, 46, 61, 0.08);
+  background: rgba(27, 67, 50, 0.06);
 }
 
 .calendar-cell.today .calendar-day-num {
-  background: var(--accent-wine);
-  color: var(--text-primary);
+  background: var(--accent-green);
+  color: var(--bg);
   border-radius: 50%;
   width: 1.5rem;
   height: 1.5rem;
@@ -657,13 +655,13 @@ h2, h3, h4 {
   width: 0.45rem;
   height: 0.45rem;
   border-radius: 50%;
-  background: var(--accent-wine);
+  background: var(--accent-green);
 }
 
 .modal-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.65);
+  background: rgba(31, 42, 29, 0.5);
   display: flex;
   align-items: center;
   justify-content: center;
