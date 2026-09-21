@@ -64,6 +64,29 @@ header.app-header {
   color: var(--text-primary);
 }
 
+.sync-status {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  padding: 0.2rem 0.55rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.sync-status:empty {
+  display: none;
+}
+
+.sync-status.synced {
+  color: var(--accent-green-light);
+  border-color: var(--accent-green-light);
+}
+
+.sync-status.error {
+  color: #a3403a;
+  border-color: currentColor;
+}
+
 nav.tabs {
   display: flex;
   gap: 0.4rem;

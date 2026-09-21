@@ -16,9 +16,11 @@ window.Agenda = window.Agenda || {};
 
   let data = storage.load();
   const listeners = [];
+  const persistListeners = [];
 
   function persist() {
     storage.save(data);
+    persistListeners.forEach((fn) => fn());
   }
 
   function getWeekdayKey(dateStr) {
@@ -158,9 +160,29 @@ window.Agenda = window.Agenda || {};
     listeners.push(fn);
   }
 
+  // Se dispara con CADA cambio guardado (incluye los que solo llaman a
+  // persist() sin notify(), como el texto de los bloques). Pensado para
+  // una capa externa de sincronización (ver js/firebaseSync.js): no
+  // dispara un re-render de la UI, solo avisa "hay algo nuevo que subir".
+  function onPersist(fn) {
+    persistListeners.push(fn);
+  }
+
   function notify() {
     persist();
     listeners.forEach((fn) => fn());
+  }
+
+  // Punto de conexión para sincronización externa (ver
+  // js/firebaseSync.js): lee y reemplaza el bloque de datos completo,
+  // sin que el resto de la app necesite saber que existe.
+  function getRawData() {
+    return data;
+  }
+
+  function replaceAllData(newData) {
+    data = newData;
+    notify();
   }
 
   function uid(prefix) {
@@ -732,5 +754,8 @@ window.Agenda = window.Agenda || {};
     getMonthMeta,
     setMonthMeta,
     onChange,
+    onPersist,
+    getRawData,
+    replaceAllData,
   };
 })(window.Agenda);
