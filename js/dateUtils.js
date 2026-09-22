@@ -67,6 +67,16 @@ window.Agenda = window.Agenda || {};
     return Array.from({ length: 7 }, (_, i) => addDays(monday, i));
   }
 
+  // Diferencia en días de calendario entre dos fechas ISO (toStr - fromStr),
+  // comparando a mediodía UTC para no romperse con cambios de horario.
+  function daysBetween(fromStr, toStr) {
+    const a = fromISO(fromStr);
+    const b = fromISO(toStr);
+    const utcA = Date.UTC(a.getFullYear(), a.getMonth(), a.getDate());
+    const utcB = Date.UTC(b.getFullYear(), b.getMonth(), b.getDate());
+    return Math.round((utcB - utcA) / 86400000);
+  }
+
   function isWeekend(date) {
     const wd = isoWeekday(date);
     return wd === 5 || wd === 6;
@@ -123,6 +133,7 @@ window.Agenda = window.Agenda || {};
     isoWeekday,
     getMonday,
     getWeekDates,
+    daysBetween,
     isWeekend,
     isSameDay,
     getMonthGrid,

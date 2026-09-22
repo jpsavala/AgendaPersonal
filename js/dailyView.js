@@ -306,12 +306,12 @@ window.Agenda = window.Agenda || {};
         timeline.appendChild(
           el(
             "div",
-            { class: "schedule-block" },
+            { class: "schedule-block run-block" },
             el(
               "div",
               { class: "schedule-block-head" },
               block.time ? el("span", { class: "schedule-time" }, block.time) : null,
-              el("span", { class: "schedule-label" }, block.text),
+              el("span", { class: "schedule-label" }, `🏃 ${block.text}`),
               el("input", {
                 type: "checkbox",
                 class: "schedule-check",
@@ -442,6 +442,7 @@ window.Agenda = window.Agenda || {};
       state.getWeekendChecklist(dateStr).forEach((item) => {
         const gymDone = item.gymStatus === "done";
         const gymResolved = item.gymStatus === "done" || item.gymStatus === "skipped";
+        const isRunItem = item.key === "correr";
 
         if (gymResolved && editingGymDate === dateStr) {
           weekendList.appendChild(
@@ -463,7 +464,7 @@ window.Agenda = window.Agenda || {};
         weekendList.appendChild(
           el(
             "label",
-            { class: "check-row" + (item.done || gymDone ? " done" : "") },
+            { class: "check-row" + (item.done || gymDone ? " done" : "") + (isRunItem ? " run-row" : "") },
             el("input", {
               type: "checkbox",
               checked: item.done || gymDone ? "checked" : null,
@@ -477,7 +478,7 @@ window.Agenda = window.Agenda || {};
                 state.toggleWeekendItem(dateStr, item.id);
               },
             }),
-            el("span", null, item.text),
+            el("span", null, isRunItem ? `🏃 ${item.text}` : item.text),
             gymResolved
               ? el(
                   "button",
@@ -497,8 +498,21 @@ window.Agenda = window.Agenda || {};
       weekendSection.appendChild(addRow("Nuevo pendiente...", (val) => state.addWeekendItem(dateStr, val)));
     }
 
+    // Contador a la carrera + racha de corrida: siempre relativo a
+    // "hoy" (no a la fecha que se esté viendo), para que sea un
+    // recordatorio constante del compromiso, se mire el día que se mire.
+    const countdown = state.getRaceCountdown();
+    const streak = state.getRunStreak();
+    const runBanner = el(
+      "div",
+      { class: "run-banner" },
+      el("span", { class: "run-banner-item" }, `🏁 ${countdown.text}`),
+      el("span", { class: "run-banner-item" }, `🔥 ${streak.text}`)
+    );
+
     const sections = [header, subtitle, eventsBanner, quoteBox, wordBox];
     if (!isWeekend) sections.push(cookToggle);
+    sections.push(runBanner);
     sections.push(timeline);
     if (isWeekend) sections.push(weekendSection);
     sections.push(grid);

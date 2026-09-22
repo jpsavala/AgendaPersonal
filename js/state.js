@@ -358,6 +358,45 @@ window.Agenda = window.Agenda || {};
     return getGymResolution(dateStr) || undefined;
   }
 
+  // ---------- Corrida: contador a la carrera y racha ----------
+  function getRaceCountdown() {
+    return ns.trainingSchedule.getRaceCountdownInfo(toISO(new Date()));
+  }
+
+  // "Hecho" de un día con corrida programada: entre semana usa la
+  // casilla simple del bloque (day.blocks.correr.done); el domingo de
+  // carrera larga usa el pendiente "Correr" del checklist de fin de
+  // semana (es un dato distinto porque vive en una lista aparte).
+  function isRunDayDone(dateStr) {
+    const day = data.days[dateStr];
+    if (!day) return false;
+    if (getWeekdayKey(dateStr) === "sun") {
+      const item = (day.weekendChecklist || []).find(
+        (i) => i.key === "correr" || (i.key === undefined && i.text === "Correr")
+      );
+      return !!(item && item.done);
+    }
+    return !!(day.blocks && day.blocks.correr && day.blocks.correr.done);
+  }
+
+  function getRunStreak() {
+    const todayStr = toISO(new Date());
+    const dates = ns.trainingSchedule.getProgrammedRunDates(todayStr);
+    let streak = 0;
+    for (let i = dates.length - 1; i >= 0; i -= 1) {
+      const d = dates[i];
+      const done = isRunDayDone(d);
+      if (d === todayStr && !done) continue; // hoy, todavía sin marcar: no cuenta ni rompe
+      if (done) streak += 1;
+      else break;
+    }
+    const text =
+      streak > 0
+        ? `Llevas ${streak} salida${streak === 1 ? "" : "s"} seguida${streak === 1 ? "" : "s"} sin fallar`
+        : "Empieza tu racha hoy";
+    return { count: streak, text };
+  }
+
   // "Prioridades del trabajo" (vista Diaria) tenía su propia lista por
   // fecha (day.priorities); ahora es la MISMA lista que "Pendientes de
   // la semana: Trabajo" de la vista Semanal. Cada prioridad existente
@@ -1001,6 +1040,8 @@ window.Agenda = window.Agenda || {};
     editGymDay,
     isGymUnavailable,
     setGymUnavailable,
+    getRaceCountdown,
+    getRunStreak,
     getWeekendChecklist,
     addWeekendItem,
     removeWeekendItem,

@@ -235,6 +235,45 @@ h2, h3, h4 {
   margin: 0 0 0.5rem;
 }
 
+/* Contador a la carrera + racha de corrida: banner sólido a propósito,
+   para que se sienta como un compromiso y no se pierda entre el resto
+   de la información. */
+.run-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem 1rem;
+  background: var(--accent-green);
+  color: var(--bg);
+  border-radius: 8px;
+  padding: 0.6rem 0.9rem;
+  margin-bottom: 1.25rem;
+  font-weight: 600;
+  font-size: 0.85rem;
+}
+
+.run-banner-item {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+/* Vista Semanal: misma línea fusionada de corrida, pero como chip
+   sólido en vez de la nota itálica gris que usan los demás bloques
+   fijos, para que resalte del resto. */
+.run-note {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  background: var(--accent-green);
+  color: var(--bg);
+  border-radius: 999px;
+  padding: 0.3rem 0.7rem;
+  margin: 0.5rem 0 0.2rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
 .quote-box {
   background: var(--surface);
   border-left: 4px solid var(--accent-gold);
@@ -335,6 +374,23 @@ h2, h3, h4 {
 .schedule-block.highlight {
   border-left-color: var(--accent-green);
   background: rgba(27, 67, 50, 0.1);
+}
+
+/* Corrida: tratamiento fuerte a propósito (fondo verde sólido, no solo
+   texto) para que se sienta como un compromiso, no una tarea más. */
+.schedule-block.run-block {
+  background: var(--accent-green);
+  border-color: var(--accent-green);
+  border-left-width: 6px;
+}
+
+.schedule-block.run-block .schedule-time,
+.schedule-block.run-block .schedule-label {
+  color: var(--bg);
+}
+
+.schedule-block.run-block .schedule-check {
+  accent-color: var(--accent-gold);
 }
 
 .schedule-block-head {
@@ -482,6 +538,21 @@ h2, h3, h4 {
 
 .check-row.done span {
   text-decoration: line-through;
+  color: var(--text-muted);
+}
+
+.check-row.run-row {
+  background: rgba(27, 67, 50, 0.14);
+  border-radius: 8px;
+  padding: 0.4rem 0.6rem;
+}
+
+.check-row.run-row span {
+  color: var(--accent-green);
+  font-weight: 700;
+}
+
+.check-row.run-row.done span {
   color: var(--text-muted);
 }
 

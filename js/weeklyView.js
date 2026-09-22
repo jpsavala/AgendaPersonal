@@ -138,6 +138,17 @@ window.Agenda = window.Agenda || {};
       }, "Replicar semana anterior")
     );
 
+    // Contador a la carrera + racha de corrida: siempre relativo a
+    // "hoy" (no a la semana que se esté viendo), igual que en la Diaria.
+    const countdown = state.getRaceCountdown();
+    const streak = state.getRunStreak();
+    const runBanner = el(
+      "div",
+      { class: "run-banner" },
+      el("span", { class: "run-banner-item" }, `🏁 ${countdown.text}`),
+      el("span", { class: "run-banner-item" }, `🔥 ${streak.text}`)
+    );
+
     const daysGrid = el("div", { class: "week-days-grid" });
     days.forEach((date, i) => {
       const isWeekend = i >= 5;
@@ -174,7 +185,7 @@ window.Agenda = window.Agenda || {};
           // sin corrida programada no muestran nada de este bloque.
           if (block.id === "correr") {
             if (block.text) {
-              dayCard.appendChild(el("p", { class: "schedule-fixed-note" }, `${block.time} — ${block.text}`));
+              dayCard.appendChild(el("p", { class: "run-note" }, `🏃 ${block.time} — ${block.text}`));
             }
             return;
           }
@@ -338,7 +349,7 @@ window.Agenda = window.Agenda || {};
     pendientesCard.appendChild(el("h4", { class: "pendientes-subtitle" }, "Vida personal"));
     pendientesCard.appendChild(el("p", { class: "muted" }, "Próximamente."));
 
-    container.append(header, daysGrid, metaCard, pendientesCard, habitsCard, revisionCard);
+    container.append(header, runBanner, daysGrid, metaCard, pendientesCard, habitsCard, revisionCard);
   }
 
   function go(delta) {

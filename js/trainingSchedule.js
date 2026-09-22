@@ -76,5 +76,29 @@ window.Agenda = window.Agenda || {};
     return RUN_SUNDAYS[dateStr];
   }
 
-  ns.trainingSchedule = { getRunText, getSundayRunText };
+  // ---------- Contador regresivo a la carrera ----------
+  const RACE_DATE = "2026-11-29";
+
+  function getRaceCountdownInfo(todayStr) {
+    const diff = ns.dateUtils.daysBetween(todayStr, RACE_DATE);
+    if (diff > 0) return { text: `Faltan ${diff} día${diff === 1 ? "" : "s"} para tu 10K`, state: "upcoming" };
+    if (diff === 0) return { text: "¡Hoy es tu carrera! 🏁", state: "today" };
+    return { text: "Carrera completada 🎉", state: "done" };
+  }
+
+  // ---------- Fechas con corrida programada (para la racha) ----------
+  // Junta los miércoles/viernes entre semana que sí tienen corrida (no
+  // los vacíos) con los domingos de carrera larga, hasta "uptoStr"
+  // inclusive, en orden cronológico. state.js la recorre para calcular
+  // la racha sin tener que conocer estas dos tablas.
+  function getProgrammedRunDates(uptoStr) {
+    const weekdayDates = Object.keys(RUN_WEEKDAY_TEXT).filter((d) => RUN_WEEKDAY_TEXT[d]);
+    const sundayDates = Object.keys(RUN_SUNDAYS);
+    return weekdayDates
+      .concat(sundayDates)
+      .filter((d) => d <= uptoStr)
+      .sort();
+  }
+
+  ns.trainingSchedule = { getRunText, getSundayRunText, getRaceCountdownInfo, getProgrammedRunDates };
 })(window.Agenda);
