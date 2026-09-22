@@ -169,6 +169,15 @@ window.Agenda = window.Agenda || {};
         }
         const blockTitle = block.time ? `${block.time} — ${block.label}` : block.label;
         if (block.fixed) {
+          // Corrida: una sola línea fusionada ("hora — Correr - 3km
+          // lento"), sin la etiqueta genérica "Correr" aparte; los días
+          // sin corrida programada no muestran nada de este bloque.
+          if (block.id === "correr") {
+            if (block.text) {
+              dayCard.appendChild(el("p", { class: "schedule-fixed-note" }, `${block.time} — ${block.text}`));
+            }
+            return;
+          }
           dayCard.appendChild(el("p", { class: "schedule-fixed-note" }, blockTitle));
           if (block.text) {
             dayCard.appendChild(el("p", { class: "schedule-readonly-text" }, block.text));

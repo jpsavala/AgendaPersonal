@@ -297,6 +297,33 @@ window.Agenda = window.Agenda || {};
         );
         return;
       }
+      // Corrida: una sola línea fusionada ("hora — Correr - 3km lento"),
+      // sin la etiqueta genérica "Correr" aparte ni el texto repetido
+      // debajo; los días sin corrida programada no muestran nada de
+      // este bloque (ni la etiqueta ni una fila vacía).
+      if (block.id === "correr" && block.fixed) {
+        if (!block.text) return;
+        timeline.appendChild(
+          el(
+            "div",
+            { class: "schedule-block" },
+            el(
+              "div",
+              { class: "schedule-block-head" },
+              block.time ? el("span", { class: "schedule-time" }, block.time) : null,
+              el("span", { class: "schedule-label" }, block.text),
+              el("input", {
+                type: "checkbox",
+                class: "schedule-check",
+                checked: block.done ? "checked" : null,
+                onchange: () => state.toggleBlockDone(dateStr, block.id),
+              })
+            )
+          )
+        );
+        return;
+      }
+
       timeline.appendChild(
         el(
           "div",
