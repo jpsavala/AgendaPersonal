@@ -316,6 +316,27 @@ window.Agenda = window.Agenda || {};
     if (ns.scheduleQueue.markSkipped(data.gymQueue, GYM_QUEUE_SESSIONS, dateStr, todayStr, makeIsValidGymDay())) notify();
   }
 
+  // Corrige una respuesta de "¿Entrenaste hoy?" ya guardada (de
+  // cualquier fecha pasada, no solo la más reciente; incluye una fecha
+  // que se haya congelado sola sin marcar nunca). Si el cambio entra en
+  // conflicto con una fecha posterior que ya tiene su propia respuesta
+  // guardada, no cambia nada: devuelve el conflicto para que la UI lo
+  // muestre antes de decidir.
+  function editGymDay(dateStr, done) {
+    if (!data.gymQueue) return { ok: false, reason: "not-resolved" };
+    const todayStr = toISO(new Date());
+    const result = ns.scheduleQueue.editResolution(
+      data.gymQueue,
+      GYM_QUEUE_SESSIONS,
+      dateStr,
+      todayStr,
+      makeIsValidGymDay(),
+      done ? "done" : "skipped"
+    );
+    if (result.ok && result.changed) notify();
+    return result;
+  }
+
   function isGymUnavailable(dateStr) {
     return !!(data.gymQueue && data.gymQueue.unavailable[dateStr]);
   }
@@ -977,6 +998,7 @@ window.Agenda = window.Agenda || {};
     toggleBlockDone,
     markGymDone,
     markGymSkipped,
+    editGymDay,
     isGymUnavailable,
     setGymUnavailable,
     getWeekendChecklist,

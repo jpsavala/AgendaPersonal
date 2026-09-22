@@ -844,6 +844,12 @@ h2, h3, h4 {
   color: var(--accent-green);
 }
 
+.gym-actions .link-btn,
+.check-row .link-btn {
+  display: inline;
+  margin-top: 0;
+}
+
 @media (min-width: 720px) {
   .daily-grid {
     grid-template-columns: 1fr 1fr;

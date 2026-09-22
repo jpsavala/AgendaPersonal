@@ -98,5 +98,86 @@ window.Agenda = window.Agenda || {};
     else delete queueState.unavailable[dateStr];
   }
 
-  ns.scheduleQueue = { resolve, markDone, markSkipped, setUnavailable, anchorOf };
+  // El puntero es siempre "1 + el índice más alto entre las
+  // resoluciones marcadas como hechas" (o pointerAtSeed si ninguna lo
+  // está todavía). Se recalcula así, en vez de llevarlo incrementado a
+  // mano, para que corregir una fecha vieja (ver editResolution) no
+  // tenga que reproducir a mano toda la lógica de avance.
+  function derivePointer(resolutions, pointerAtSeed) {
+    let pointer = pointerAtSeed || 0;
+    Object.values(resolutions).forEach((r) => {
+      if (r.status === "done" && r.index + 1 > pointer) pointer = r.index + 1;
+    });
+    return pointer;
+  }
+
+  // Corrige una fecha YA resuelta (explícita o congelada sola al pasar
+  // sin marcar) a un estado distinto — p. ej. "toqué 'No' por error,
+  // era 'Sí'". No se limita a "hoy": aplica a cualquier fecha pasada.
+  //
+  // Antes de tocar nada, simula de nuevo, con el estado nuevo, todas
+  // las fechas POSTERIORES que ya tengan su propia resolución guardada,
+  // y compara contra lo que ya está guardado ahí. Si alguna no
+  // coincide (le tocaría otra sesión, o directamente dejaría de ser un
+  // día válido de entrenar), no cambia nada y devuelve el conflicto
+  // para que quien llama decida — nunca sobrescribe en silencio.
+  //
+  // Devuelve { ok: true, changed } si se aplicó (o no hacía falta
+  // cambiar nada), o { ok: false, reason: "not-resolved" | "conflict",
+  // conflicts? } si no se pudo.
+  function editResolution(queueState, sessions, dateStr, todayStr, isValidDay, newStatus) {
+    const current = resolve(queueState, sessions, dateStr, todayStr, isValidDay);
+    if (!current || (current.status !== "done" && current.status !== "skipped")) {
+      return { ok: false, reason: "not-resolved" };
+    }
+    if (current.status === newStatus) return { ok: true, changed: false };
+
+    const laterDates = Object.keys(queueState.resolutions)
+      .filter((d) => d > dateStr)
+      .sort();
+
+    const trialResolutions = {};
+    Object.keys(queueState.resolutions).forEach((d) => {
+      if (d < dateStr) trialResolutions[d] = queueState.resolutions[d];
+    });
+    trialResolutions[dateStr] = { status: newStatus, index: current.index };
+
+    const pointerAtSeed = queueState.pointerAtSeed || 0;
+    const trialQueue = {
+      pointer: derivePointer(trialResolutions, pointerAtSeed),
+      pointerAtSeed,
+      seedAnchor: queueState.seedAnchor,
+      resolutions: trialResolutions,
+      unavailable: queueState.unavailable,
+    };
+
+    const conflicts = [];
+    const recomputed = {};
+    laterDates.forEach((d) => {
+      const old = queueState.resolutions[d];
+      const r = resolve(trialQueue, sessions, d, todayStr, isValidDay);
+      if (!r || r.index !== old.index) {
+        conflicts.push({
+          date: d,
+          oldSession: sessions[old.index],
+          oldStatus: old.status,
+          newSession: r ? sessions[r.index] : null,
+          newStatus: r ? r.status : null,
+        });
+      } else {
+        recomputed[d] = { status: old.status, index: r.index };
+      }
+    });
+
+    if (conflicts.length) return { ok: false, reason: "conflict", conflicts };
+
+    queueState.resolutions[dateStr] = { status: newStatus, index: current.index };
+    laterDates.forEach((d) => {
+      queueState.resolutions[d] = recomputed[d];
+    });
+    queueState.pointer = derivePointer(queueState.resolutions, pointerAtSeed);
+    return { ok: true, changed: true };
+  }
+
+  ns.scheduleQueue = { resolve, markDone, markSkipped, setUnavailable, editResolution, anchorOf };
 })(window.Agenda);

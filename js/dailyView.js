@@ -56,13 +56,65 @@ window.Agenda = window.Agenda || {};
     return list;
   }
 
+  // Fecha (o null) cuya respuesta de gimnasio se está corrigiendo en
+  // este momento: al tocar "Corregir" se vuelve a mostrar Sí/No para
+  // esa fecha puntual, en vez del estado ya guardado.
+  let editingGymDate = null;
+
+  function applyGymEdit(dateStr, done) {
+    const result = state.editGymDay(dateStr, done);
+    editingGymDate = null;
+    if (!result.ok && result.reason === "conflict") {
+      showGymConflictWarning(result.conflicts);
+    }
+    // Siempre se vuelve a dibujar (haya cambiado algo o no), para que la
+    // vista salga del modo "Corregir" y refleje el estado real: el
+    // guardado silencioso o la advertencia ya lo decidieron arriba.
+    render(containerRef);
+  }
+
+  function showGymConflictWarning(conflicts) {
+    const lines = conflicts.map((c) => {
+      const dateLabel = dateUtils.formatLong(dateUtils.fromISO(c.date));
+      if (!c.newSession) {
+        return `• ${dateLabel}: con este cambio, ese día ya no correspondería entrenar (tenías guardado "${c.oldSession}").`;
+      }
+      return `• ${dateLabel}: tenías guardado "${c.oldSession}", pero con este cambio le tocaría "${c.newSession}".`;
+    });
+    const plural = conflicts.length > 1;
+    alert(
+      `No se pudo aplicar la corrección: choca con ${plural ? conflicts.length + " fechas posteriores" : "una fecha posterior"} que ya ${plural ? "tienen" : "tiene"} su propia respuesta guardada:\n\n${lines.join("\n")}\n\nCorregí esas fechas primero (de la misma forma) y volvé a intentar.`
+    );
+  }
+
   function buildGymExtras(dateStr, block) {
     if (!block.gymStatus) return null;
     const parts = [];
-    if (block.gymStatus === "done") {
-      parts.push(el("p", { class: "muted" }, "✓ Hecho"));
-    } else if (block.gymStatus === "skipped") {
-      parts.push(el("p", { class: "muted" }, "No realizada"));
+    if (block.gymStatus === "done" || block.gymStatus === "skipped") {
+      if (editingGymDate === dateStr) {
+        parts.push(
+          el(
+            "div",
+            { class: "gym-actions" },
+            el("span", { class: "muted" }, "Corregir: ¿entrenaste ese día?"),
+            el("button", { class: "btn-secondary", onclick: () => applyGymEdit(dateStr, false) }, "No"),
+            el("button", { class: "btn-primary", onclick: () => applyGymEdit(dateStr, true) }, "Sí")
+          )
+        );
+      } else {
+        parts.push(
+          el(
+            "div",
+            { class: "gym-actions" },
+            el("span", { class: "muted" }, block.gymStatus === "done" ? "✓ Hecho" : "No realizada"),
+            el(
+              "button",
+              { class: "link-btn", onclick: () => { editingGymDate = dateStr; render(containerRef); } },
+              "Corregir"
+            )
+          )
+        );
+      }
     } else if (block.gymStatus === "pending") {
       parts.push(
         el(
@@ -165,13 +217,14 @@ window.Agenda = window.Agenda || {};
         onchange: (e) => {
           currentDate = dateUtils.fromISO(e.target.value);
           addingMeal = false;
+          editingGymDate = null;
           render(container);
         },
       }),
       el("button", { class: "btn-icon", onclick: () => go(1) }, "▶"),
       el("button", {
         class: "btn-secondary",
-        onclick: () => { currentDate = new Date(); addingMeal = false; render(container); },
+        onclick: () => { currentDate = new Date(); addingMeal = false; editingGymDate = null; render(container); },
       }, "Hoy")
     );
 
@@ -361,6 +414,25 @@ window.Agenda = window.Agenda || {};
       const weekendList = el("div", { class: "check-list" });
       state.getWeekendChecklist(dateStr).forEach((item) => {
         const gymDone = item.gymStatus === "done";
+        const gymResolved = item.gymStatus === "done" || item.gymStatus === "skipped";
+
+        if (gymResolved && editingGymDate === dateStr) {
+          weekendList.appendChild(
+            el(
+              "div",
+              { class: "check-row" },
+              el("span", null, item.text),
+              el(
+                "div",
+                { class: "gym-actions" },
+                el("button", { class: "btn-secondary", onclick: () => applyGymEdit(dateStr, false) }, "No"),
+                el("button", { class: "btn-primary", onclick: () => applyGymEdit(dateStr, true) }, "Sí")
+              )
+            )
+          );
+          return;
+        }
+
         weekendList.appendChild(
           el(
             "label",
@@ -379,6 +451,13 @@ window.Agenda = window.Agenda || {};
               },
             }),
             el("span", null, item.text),
+            gymResolved
+              ? el(
+                  "button",
+                  { class: "link-btn", onclick: () => { editingGymDate = dateStr; render(containerRef); } },
+                  "Corregir"
+                )
+              : null,
             el("button", {
               class: "btn-remove",
               title: "Quitar pendiente",
@@ -423,6 +502,7 @@ window.Agenda = window.Agenda || {};
   function go(delta) {
     currentDate = dateUtils.addDays(currentDate, delta);
     addingMeal = false;
+    editingGymDate = null;
     if (containerRef) render(containerRef);
   }
 
