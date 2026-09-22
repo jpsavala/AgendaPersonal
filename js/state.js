@@ -337,12 +337,52 @@ window.Agenda = window.Agenda || {};
     return getGymResolution(dateStr) || undefined;
   }
 
+  // "Prioridades del trabajo" (vista Diaria) tenía su propia lista por
+  // fecha (day.priorities); ahora es la MISMA lista que "Pendientes de
+  // la semana: Trabajo" de la vista Semanal. Cada prioridad existente
+  // se migra a un pendiente de esa semana, asignado al día de la semana
+  // de esa fecha y al bloque de oficina 10:00-14:00 por defecto (el
+  // usuario puede cambiarlo después desde la vista Semanal). No usa
+  // getWeek()/OFFICE_BLOCK_IDS a propósito: esta función corre antes de
+  // que esas constantes se definan más abajo en el archivo.
+  function migratePrioritiesToWeekTrabajo() {
+    Object.keys(data.days || {})
+      .sort()
+      .forEach((dateStr) => {
+        const day = data.days[dateStr];
+        if (!day || !day.priorities || !day.priorities.length) return;
+        const mondayStr = getMondayKey(dateStr);
+        const dayKey = getWeekdayKey(dateStr);
+        if (!data.weeks[mondayStr]) {
+          data.weeks[mondayStr] = {
+            metaSemana: "",
+            habits: {},
+            revisionViernes: { cumplido: "", ajuste: "" },
+            pendientesTrabajo: [],
+            pendientesPersonal: [],
+          };
+        }
+        if (!data.weeks[mondayStr].pendientesTrabajo) data.weeks[mondayStr].pendientesTrabajo = [];
+        day.priorities.forEach((p) => {
+          data.weeks[mondayStr].pendientesTrabajo.push({
+            id: p.id,
+            text: p.text,
+            done: !!p.done,
+            dayKeys: [dayKey],
+            blockId: "oficina_manana",
+          });
+        });
+        day.priorities = [];
+      });
+  }
+
   migrateToWeekdayTemplates();
   migrateWeekdayTemplatesToCurrentWeek();
   purgeFixedBlockText();
   migrateNocheBlockSplit();
   migrateGymQueue();
   migrateGymQueueCorrection();
+  migratePrioritiesToWeekTrabajo();
   persist();
 
   function onChange(fn) {
@@ -506,7 +546,7 @@ window.Agenda = window.Agenda || {};
   }
 
   function defaultDay() {
-    return { cocina: true, blocks: {}, habits: {}, priorities: [], weekendChecklist: [] };
+    return { cocina: true, blocks: {}, habits: {}, weekendChecklist: [] };
   }
 
   function getDay(dateStr) {
@@ -525,6 +565,10 @@ window.Agenda = window.Agenda || {};
     if (!day.blocks) day.blocks = {};
     if (!day.weekendChecklist) day.weekendChecklist = [];
     delete day.hours;
+    // "Prioridades del trabajo" dejó de ser una lista propia por fecha:
+    // ahora es la misma lista que "Pendientes de la semana: Trabajo"
+    // (ver migratePrioritiesToWeekTrabajo y getWorkPriorities).
+    delete day.priorities;
     return day;
   }
 
@@ -662,26 +706,6 @@ window.Agenda = window.Agenda || {};
     notify();
   }
 
-  function addPriority(dateStr, text) {
-    const trimmed = text.trim();
-    if (!trimmed) return;
-    getDay(dateStr).priorities.push({ id: uid("p"), text: trimmed, done: false });
-    notify();
-  }
-
-  function removePriority(dateStr, id) {
-    const day = getDay(dateStr);
-    day.priorities = day.priorities.filter((p) => p.id !== id);
-    notify();
-  }
-
-  function togglePriority(dateStr, id) {
-    const day = getDay(dateStr);
-    const p = day.priorities.find((p) => p.id === id);
-    if (p) p.done = !p.done;
-    notify();
-  }
-
   // ---------- Semanas ----------
   function defaultWeek() {
     return {
@@ -788,6 +812,28 @@ window.Agenda = window.Agenda || {};
     toggleWeekTrabajoPendiente(getMondayKey(dateStr), id);
   }
 
+  // ---------- "Prioridades del trabajo" (vista Diaria) ----------
+  // Es la misma lista y el mismo dato que "Pendientes de la semana:
+  // Trabajo" de la vista Semanal (pendientesTrabajo), no un sistema
+  // aparte: acá solo se combinan los dos bloques de oficina para
+  // mostrar/agregar desde la fecha que se está viendo, sin tener que
+  // elegir día (se asigna solo al día de la semana de esa fecha).
+  function getWorkPriorities(dateStr) {
+    return OFFICE_BLOCK_IDS.flatMap((blockId) => getOfficePendientes(dateStr, blockId));
+  }
+
+  function addOfficePendienteForDate(dateStr, text, blockId) {
+    addWeekTrabajoPendiente(getMondayKey(dateStr), text, [getWeekdayKey(dateStr)], blockId);
+  }
+
+  // "Quitar" acá solo desasigna el día que se está viendo (el mismo
+  // pendiente puede seguir apareciendo en otros días si tiene más de
+  // uno asignado); borrarlo del todo sigue siendo cosa de la vista
+  // Semanal (removeWeekTrabajoPendiente).
+  function removeOfficePendienteForDate(dateStr, id) {
+    toggleWeekTrabajoPendienteDay(getMondayKey(dateStr), id, getWeekdayKey(dateStr));
+  }
+
   function setWeekMeta(mondayStr, text) {
     getWeek(mondayStr).metaSemana = text;
     persist();
@@ -867,8 +913,7 @@ window.Agenda = window.Agenda || {};
 
   function dayHasIndicator(dateStr) {
     const hasEvents = (data.events[dateStr] || []).length > 0;
-    const day = data.days[dateStr];
-    const hasPendingPriority = !!(day && day.priorities.some((p) => !p.done));
+    const hasPendingPriority = getWorkPriorities(dateStr).some((p) => !p.done);
     return hasEvents || hasPendingPriority;
   }
 
@@ -939,9 +984,9 @@ window.Agenda = window.Agenda || {};
     removeWeekendItem,
     toggleWeekendItem,
     toggleDayHabit,
-    addPriority,
-    removePriority,
-    togglePriority,
+    getWorkPriorities,
+    addOfficePendienteForDate,
+    removeOfficePendienteForDate,
     getWeek,
     setWeekMeta,
     getWeekTrabajoPendientes,

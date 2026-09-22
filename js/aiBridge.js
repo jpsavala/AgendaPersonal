@@ -8,7 +8,7 @@
  *   2. Enviarlo a un servicio de IA junto con el estado relevante
  *      (por ejemplo Agenda.state.getDay(fecha) o getWeek(lunes)).
  *   3. Traducir la respuesta de la IA en llamadas a las funciones ya
- *      existentes de Agenda.state (setHourText, addPriority,
+ *      existentes de Agenda.state (setBlockText, addOfficePendienteForDate,
  *      toggleDayHabit, addEvent, etc.) para que la app y el
  *      almacenamiento no cambien.
  *

@@ -21,6 +21,19 @@ window.Agenda = window.Agenda || {};
   }
 
   const OFFICE_BLOCK_IDS = ["oficina_manana", "tarde_oficina"];
+  const OFFICE_BLOCK_OPTIONS = [
+    { value: "oficina_manana", label: "10:00–14:00" },
+    { value: "tarde_oficina", label: "16:30–19:00" },
+  ];
+
+  function buildOfficeBlockSelect(selectedValue) {
+    const select = el("select", { class: "block-select" });
+    OFFICE_BLOCK_OPTIONS.forEach((opt) => {
+      select.appendChild(el("option", { value: opt.value }, opt.label));
+    });
+    select.value = selectedValue || OFFICE_BLOCK_OPTIONS[0].value;
+    return select;
+  }
 
   function buildOfficePendientesList(dateStr, blockId) {
     const items = state.getOfficePendientes(dateStr, blockId);
@@ -291,10 +304,13 @@ window.Agenda = window.Agenda || {};
     habitsSection.appendChild(habitsList);
     habitsSection.appendChild(addRow("Nuevo hábito...", (val) => state.addHabit(val)));
 
-    // Prioridades del trabajo
+    // Prioridades del trabajo: misma lista y mismo dato que "Pendientes
+    // de la semana: Trabajo" de la vista Semanal (pendientesTrabajo),
+    // combinando los dos bloques de oficina para esta fecha.
     const prioritiesSection = el("div", { class: "card" }, el("h3", null, "Prioridades del trabajo"));
     const prioritiesList = el("div", { class: "check-list" });
-    day.priorities.forEach((p) => {
+    state.getWorkPriorities(dateStr).forEach((p) => {
+      const blockLabel = (OFFICE_BLOCK_OPTIONS.find((o) => o.value === p.blockId) || {}).label || "";
       prioritiesList.appendChild(
         el(
           "label",
@@ -302,19 +318,39 @@ window.Agenda = window.Agenda || {};
           el("input", {
             type: "checkbox",
             checked: p.done ? "checked" : null,
-            onchange: () => state.togglePriority(dateStr, p.id),
+            onchange: () => state.toggleOfficePendiente(dateStr, p.id),
           }),
           el("span", null, p.text),
+          el("span", { class: "muted" }, blockLabel),
           el("button", {
             class: "btn-remove",
             title: "Quitar pendiente",
-            onclick: () => state.removePriority(dateStr, p.id),
+            onclick: () => state.removeOfficePendienteForDate(dateStr, p.id),
           }, "×")
         )
       );
     });
     prioritiesSection.appendChild(prioritiesList);
-    prioritiesSection.appendChild(addRow("Nuevo pendiente...", (val) => state.addPriority(dateStr, val)));
+
+    const newPriorityInput = el("input", { type: "text", class: "add-input", placeholder: "Nuevo pendiente..." });
+    const newPriorityBlockSelect = buildOfficeBlockSelect(OFFICE_BLOCK_OPTIONS[0].value);
+    const commitPriority = () => {
+      if (newPriorityInput.value.trim()) {
+        state.addOfficePendienteForDate(dateStr, newPriorityInput.value, newPriorityBlockSelect.value);
+        newPriorityInput.value = "";
+        newPriorityBlockSelect.value = OFFICE_BLOCK_OPTIONS[0].value;
+      }
+    };
+    newPriorityInput.addEventListener("keydown", (e) => { if (e.key === "Enter") commitPriority(); });
+    prioritiesSection.appendChild(
+      el(
+        "div",
+        { class: "add-row" },
+        newPriorityInput,
+        newPriorityBlockSelect,
+        el("button", { class: "btn-primary", onclick: commitPriority }, "Agregar")
+      )
+    );
 
     const grid = el("div", { class: "daily-grid" }, habitsSection, prioritiesSection);
 
