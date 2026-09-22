@@ -38,7 +38,7 @@ window.Agenda = window.Agenda || {};
   const AFTERNOON_FIXED = { id: "tarde_oficina", time: "16:30–19:00", label: "Oficina", fixed: true };
 
   const FIXED_END = [
-    { id: "correr", time: "Después de 19:00", label: "Correr" },
+    { id: "correr", time: "19:00–20:00", label: "Correr" },
     { id: "cena", time: "20:00–21:20", label: "Cenar y bañarme", fixed: true },
     { id: "libre_noche", time: "21:30–22:10", label: "Bloque libre" },
   ];
