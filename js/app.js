@@ -37,4 +37,9 @@ window.Agenda = window.Agenda || {};
     mountActive();
     ns.state.onChange(refreshActive);
   });
+
+  // Para que otras capas (ver js/userConfigSync.js) puedan pedir un
+  // redibujado después de aplicar/quitar la configuración de una
+  // cuenta, sin tener que conocer el mecanismo de pestañas.
+  ns.app = { refreshActive: () => refreshActive() };
 })(window.Agenda);

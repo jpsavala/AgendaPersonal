@@ -872,6 +872,21 @@ window.Agenda = window.Agenda || {};
     toggleWeekTrabajoPendiente(getMondayKey(dateStr), id);
   }
 
+  // Opciones para el selector de bloque al agregar un pendiente de
+  // trabajo (Diaria y Semanal): en vez de una etiqueta de horario fija
+  // en el código, se arma leyendo los bloques de oficina reales de la
+  // cuenta (una franja o dos, con sus horas propias), así que muestra
+  // el horario que de verdad tenga cada cuenta. No depende de la fecha
+  // que se esté viendo (los bloques de oficina son estructurales, no
+  // cambian entre semanas) para que siga funcionando igual aunque se
+  // esté agregando el pendiente desde un fin de semana.
+  function getOfficeBlockOptions() {
+    return ns.scheduleDefs
+      .getBlocks(true)
+      .filter((b) => OFFICE_BLOCK_IDS.includes(b.id))
+      .map((b) => ({ value: b.id, label: b.time || b.label }));
+  }
+
   // ---------- "Prioridades del trabajo" (vista Diaria) ----------
   // Es la misma lista y el mismo dato que "Pendientes de la semana:
   // Trabajo" de la vista Semanal (pendientesTrabajo), no un sistema
@@ -1060,6 +1075,7 @@ window.Agenda = window.Agenda || {};
     setWeekTrabajoPendienteBlock,
     getOfficePendientes,
     toggleOfficePendiente,
+    getOfficeBlockOptions,
     toggleWeekHabit,
     setRevisionViernes,
     getEvents,

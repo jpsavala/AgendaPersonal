@@ -1,10 +1,16 @@
 /*
- * Definición fija de los bloques de la vista diaria (horarios de
- * duración variable, no una cuadrícula de horas). Solo el bloque de
- * comida (14:00–16:00 aprox.) cambia de contenido según el toggle
- * "día que cocino" / "día que no cocino". Los bloques marcados con
- * `fixed: true` son siempre "Oficina": no tienen texto editable, solo
- * su casilla de cumplido.
+ * Definición de los bloques de la vista diaria (horarios de duración
+ * variable, no una cuadrícula de horas). Por defecto usa los bloques
+ * fijos de siempre (los de abajo); si hay una configuración de usuario
+ * activa (ver js/userConfigSync.js), setUserSchedule() la reemplaza acá
+ * y getBlocks()/getWeekendBlocks() devuelven ESA en su lugar — sin
+ * sesión iniciada (o mientras la configuración no haya cargado), el
+ * comportamiento es exactamente el de siempre, sin ningún cambio.
+ *
+ * Solo el bloque de comida (14:00–16:00 aprox.) cambia de contenido
+ * según el toggle "día que cocino" / "día que no cocino". Los bloques
+ * marcados con `fixed: true` no tienen texto editable, solo su casilla
+ * de cumplido.
  */
 window.Agenda = window.Agenda || {};
 (function (ns) {
@@ -43,11 +49,6 @@ window.Agenda = window.Agenda || {};
     { id: "libre_noche", time: "21:30–22:10", label: "Bloque libre" },
   ];
 
-  function getBlocks(cocina) {
-    const midday = cocina ? COOK_MIDDAY : NO_COOK_MIDDAY;
-    return [...FIXED_START, ...midday, MARKER, AFTERNOON_FIXED, ...FIXED_END];
-  }
-
   // Sábado y domingo no tienen horario rígido: solo 3 franjas sueltas
   // de referencia, sin rango de hora obligatorio.
   const WEEKEND_BLOCKS = [
@@ -56,9 +57,44 @@ window.Agenda = window.Agenda || {};
     { id: "finde_noche", label: "Noche" },
   ];
 
+  // Configuración de la cuenta con sesión iniciada, si la hay (ver
+  // js/userConfig.js por su forma exacta). null = sin sesión, o
+  // sesión sin configuración cargada todavía: se usan los bloques de
+  // arriba, igual que siempre.
+  let userSchedule = null;
+
+  function setUserSchedule(schedule) {
+    userSchedule = schedule || null;
+  }
+
+  function clearUserSchedule() {
+    userSchedule = null;
+  }
+
+  function getBlocks(cocina) {
+    if (userSchedule) {
+      // Horario generado por onboarding: una sola lista ya ordenada,
+      // sin variante cocino/no cocino (no es una pregunta genérica).
+      if (userSchedule.flat) return userSchedule.flat;
+      // Horario migrado de la cuenta dueña: mismo armado de siempre,
+      // solo que las piezas vienen de datos en vez de estar fijas acá.
+      const midday = cocina ? userSchedule.cookMidday : userSchedule.noCookMidday;
+      return [
+        ...(userSchedule.fixedStart || []),
+        ...(midday || []),
+        ...(userSchedule.marker ? [userSchedule.marker] : []),
+        ...(userSchedule.afternoonFixed ? [userSchedule.afternoonFixed] : []),
+        ...(userSchedule.fixedEnd || []),
+      ];
+    }
+    const midday = cocina ? COOK_MIDDAY : NO_COOK_MIDDAY;
+    return [...FIXED_START, ...midday, MARKER, AFTERNOON_FIXED, ...FIXED_END];
+  }
+
   function getWeekendBlocks() {
+    if (userSchedule && userSchedule.weekendBlocks) return userSchedule.weekendBlocks;
     return WEEKEND_BLOCKS;
   }
 
-  ns.scheduleDefs = { getBlocks, getWeekendBlocks };
+  ns.scheduleDefs = { getBlocks, getWeekendBlocks, setUserSchedule, clearUserSchedule };
 })(window.Agenda);

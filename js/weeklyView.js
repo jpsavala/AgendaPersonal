@@ -7,11 +7,6 @@ window.Agenda = window.Agenda || {};
   const ADD_NEW_MEAL_VALUE = "__add_new__";
   let addingMealDate = null;
 
-  const OFFICE_BLOCK_OPTIONS = [
-    { value: "oficina_manana", label: "10:00–14:00" },
-    { value: "tarde_oficina", label: "16:30–19:00" },
-  ];
-
   const DAY_LETTERS = ["L", "M", "X", "J", "V", "S", "D"];
 
   function el(tag, attrs, ...children) {
@@ -28,12 +23,14 @@ window.Agenda = window.Agenda || {};
     return node;
   }
 
-  function buildBlockSelect(selectedValue, onChange) {
+  // Las opciones (qué bloques de oficina hay y a qué hora) se leen en
+  // vivo del horario real de la cuenta, no de una lista fija.
+  function buildBlockSelect(options, selectedValue, onChange) {
     const select = el("select", { class: "block-select", onchange: onChange });
-    OFFICE_BLOCK_OPTIONS.forEach((opt) => {
+    options.forEach((opt) => {
       select.appendChild(el("option", { value: opt.value }, opt.label));
     });
-    select.value = selectedValue || OFFICE_BLOCK_OPTIONS[0].value;
+    select.value = selectedValue || (options[0] && options[0].value) || "";
     return select;
   }
 
@@ -289,6 +286,7 @@ window.Agenda = window.Agenda || {};
     // Pendientes de la semana (Trabajo funcional; Vida personal, por ahora, solo en la interfaz)
     const pendientesCard = el("div", { class: "card" }, el("h3", null, "Pendientes de la semana"));
 
+    const officeBlockOptions = state.getOfficeBlockOptions();
     pendientesCard.appendChild(el("h4", { class: "pendientes-subtitle" }, "Trabajo"));
     const trabajoList = el("div", { class: "check-list" });
     state.getWeekTrabajoPendientes(mondayStr).forEach((item) => {
@@ -296,7 +294,7 @@ window.Agenda = window.Agenda || {};
         state.toggleWeekTrabajoPendienteDay(mondayStr, item.id, dk)
       );
 
-      const blockSelect = buildBlockSelect(item.blockId, (e) =>
+      const blockSelect = buildBlockSelect(officeBlockOptions, item.blockId, (e) =>
         state.setWeekTrabajoPendienteBlock(mondayStr, item.id, e.target.value)
       );
 
@@ -324,14 +322,14 @@ window.Agenda = window.Agenda || {};
 
     const newTrabajoInput = el("input", { type: "text", class: "add-input", placeholder: "Nuevo pendiente de trabajo..." });
     const newTrabajoDayCheckboxes = buildDayCheckboxGroup([]);
-    const newTrabajoBlockSelect = buildBlockSelect(OFFICE_BLOCK_OPTIONS[0].value);
+    const newTrabajoBlockSelect = buildBlockSelect(officeBlockOptions, officeBlockOptions[0] && officeBlockOptions[0].value);
     const commitTrabajo = () => {
       if (newTrabajoInput.value.trim()) {
         const selectedDays = Array.from(newTrabajoDayCheckboxes.querySelectorAll("input:checked")).map((cb) => cb.value);
         state.addWeekTrabajoPendiente(mondayStr, newTrabajoInput.value, selectedDays, newTrabajoBlockSelect.value);
         newTrabajoInput.value = "";
         newTrabajoDayCheckboxes.querySelectorAll("input").forEach((cb) => { cb.checked = false; });
-        newTrabajoBlockSelect.value = OFFICE_BLOCK_OPTIONS[0].value;
+        newTrabajoBlockSelect.value = (officeBlockOptions[0] && officeBlockOptions[0].value) || "";
       }
     };
     newTrabajoInput.addEventListener("keydown", (e) => { if (e.key === "Enter") commitTrabajo(); });

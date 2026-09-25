@@ -9,8 +9,8 @@
 <body>
   <header class="app-header">
     <div class="masthead">
-      <span class="masthead-badge">JP</span>
-      <span class="masthead-name">Juan Pablo Savala</span>
+      <span class="masthead-badge" id="masthead-badge">JP</span>
+      <span class="masthead-name" id="masthead-name">Juan Pablo Savala</span>
       <span class="sync-status" id="sync-status" title="Estado de sincronización entre dispositivos"></span>
     </div>
     <nav class="tabs">
@@ -34,6 +34,7 @@
   <script src="js/storage.js"></script>
   <script src="js/dateUtils.js"></script>
   <script src="js/scheduleDefs.js"></script>
+  <script src="js/userConfig.js"></script>
   <script src="js/trainingSchedule.js"></script>
   <script src="js/scheduleQueue.js"></script>
   <script src="js/state.js"></script>
@@ -45,6 +46,7 @@
   <script src="js/yearView.js"></script>
   <script src="js/app.js"></script>
   <script src="js/firebaseSync.js"></script>
+  <script src="js/userConfigSync.js"></script>
   <script>
     (function () {
       const el = document.getElementById("sync-status");

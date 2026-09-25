@@ -21,17 +21,16 @@ window.Agenda = window.Agenda || {};
   }
 
   const OFFICE_BLOCK_IDS = ["oficina_manana", "tarde_oficina"];
-  const OFFICE_BLOCK_OPTIONS = [
-    { value: "oficina_manana", label: "10:00–14:00" },
-    { value: "tarde_oficina", label: "16:30–19:00" },
-  ];
 
-  function buildOfficeBlockSelect(selectedValue) {
+  // Las opciones (qué bloques de oficina hay y a qué hora) se leen en
+  // vivo del horario real de la cuenta (state.getOfficeBlockOptions),
+  // no de una lista fija: una franja o dos, con sus horas propias.
+  function buildOfficeBlockSelect(options, selectedValue) {
     const select = el("select", { class: "block-select" });
-    OFFICE_BLOCK_OPTIONS.forEach((opt) => {
+    options.forEach((opt) => {
       select.appendChild(el("option", { value: opt.value }, opt.label));
     });
-    select.value = selectedValue || OFFICE_BLOCK_OPTIONS[0].value;
+    select.value = selectedValue || (options[0] && options[0].value) || "";
     return select;
   }
 
@@ -387,10 +386,11 @@ window.Agenda = window.Agenda || {};
     // Prioridades del trabajo: misma lista y mismo dato que "Pendientes
     // de la semana: Trabajo" de la vista Semanal (pendientesTrabajo),
     // combinando los dos bloques de oficina para esta fecha.
+    const officeBlockOptions = state.getOfficeBlockOptions();
     const prioritiesSection = el("div", { class: "card" }, el("h3", null, "Prioridades del trabajo"));
     const prioritiesList = el("div", { class: "check-list" });
     state.getWorkPriorities(dateStr).forEach((p) => {
-      const blockLabel = (OFFICE_BLOCK_OPTIONS.find((o) => o.value === p.blockId) || {}).label || "";
+      const blockLabel = (officeBlockOptions.find((o) => o.value === p.blockId) || {}).label || "";
       prioritiesList.appendChild(
         el(
           "label",
@@ -413,12 +413,12 @@ window.Agenda = window.Agenda || {};
     prioritiesSection.appendChild(prioritiesList);
 
     const newPriorityInput = el("input", { type: "text", class: "add-input", placeholder: "Nuevo pendiente..." });
-    const newPriorityBlockSelect = buildOfficeBlockSelect(OFFICE_BLOCK_OPTIONS[0].value);
+    const newPriorityBlockSelect = buildOfficeBlockSelect(officeBlockOptions, officeBlockOptions[0] && officeBlockOptions[0].value);
     const commitPriority = () => {
       if (newPriorityInput.value.trim()) {
         state.addOfficePendienteForDate(dateStr, newPriorityInput.value, newPriorityBlockSelect.value);
         newPriorityInput.value = "";
-        newPriorityBlockSelect.value = OFFICE_BLOCK_OPTIONS[0].value;
+        newPriorityBlockSelect.value = (officeBlockOptions[0] && officeBlockOptions[0].value) || "";
       }
     };
     newPriorityInput.addEventListener("keydown", (e) => { if (e.key === "Enter") commitPriority(); });
