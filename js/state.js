@@ -460,14 +460,25 @@ window.Agenda = window.Agenda || {};
       });
   }
 
-  migrateToWeekdayTemplates();
-  migrateWeekdayTemplatesToCurrentWeek();
-  purgeFixedBlockText();
-  migrateNocheBlockSplit();
-  migrateGymQueue();
-  migrateGymQueueCorrection();
-  migrateGymQueueCorrection2();
-  migratePrioritiesToWeekTrabajo();
+  // Todas estas migraciones son idempotentes (cada una revisa su propia
+  // bandera y no hace nada si ya corrió). Además de correr una vez al
+  // cargar la app, se vuelven a correr cada vez que llega un estado
+  // nuevo desde afuera (ver replaceAllData más abajo): si no fuera así,
+  // cuando la sincronización con Firebase trae un documento remoto más
+  // viejo (guardado antes de que existiera una corrección puntual como
+  // migrateGymQueueCorrection2), ese estado viejo pisaría el corregido
+  // sin que la corrección tuviera nunca la oportunidad de aplicarse.
+  function runMigrations() {
+    migrateToWeekdayTemplates();
+    migrateWeekdayTemplatesToCurrentWeek();
+    purgeFixedBlockText();
+    migrateNocheBlockSplit();
+    migrateGymQueue();
+    migrateGymQueueCorrection();
+    migrateGymQueueCorrection2();
+    migratePrioritiesToWeekTrabajo();
+  }
+  runMigrations();
   persist();
 
   function onChange(fn) {
@@ -496,6 +507,7 @@ window.Agenda = window.Agenda || {};
 
   function replaceAllData(newData) {
     data = newData;
+    runMigrations();
     notify();
   }
 
