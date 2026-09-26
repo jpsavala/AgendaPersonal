@@ -646,10 +646,31 @@ window.Agenda = window.Agenda || {};
     return undefined;
   }
 
+  // Bloque de gimnasio del sábado: mismo tratamiento que entre semana
+  // (mismo control "¿Entrenaste hoy?"), pero solo aparece si la cuenta
+  // tiene gimnasio configurado (por ahora, solo la cuenta migrada — ver
+  // js/userConfig.js; una cuenta de onboarding sin gimnasio no ve nada
+  // acá, consistente con que esos módulos avanzados no le aplican
+  // todavía). El sábado es comodín: si no hay ninguna sesión atrasada
+  // de esa semana, se muestra como "Descanso", de solo lectura.
+  function buildSaturdayGymBlock(dateStr) {
+    const weekdayGymDef = ns.scheduleDefs.getBlocks(true).find((d) => d.id === "gimnasio");
+    if (!weekdayGymDef) return null;
+    if (isGymUnavailable(dateStr)) {
+      return { ...weekdayGymDef, fixed: true, text: "No disponible", done: false, gymStatus: "unavailable" };
+    }
+    const r = getGymResolution(dateStr);
+    if (r) {
+      return { ...weekdayGymDef, fixed: true, text: r.session, done: r.status === "done", gymStatus: r.status };
+    }
+    return { ...weekdayGymDef, fixed: true, text: "Descanso", done: false, gymStatus: "rest" };
+  }
+
   function getDayBlocks(dateStr) {
     const day = getDay(dateStr);
-    const defs = isWeekendDate(dateStr) ? ns.scheduleDefs.getWeekendBlocks() : ns.scheduleDefs.getBlocks(day.cocina);
-    return defs.map((def) => {
+    const isWeekend = isWeekendDate(dateStr);
+    const defs = isWeekend ? ns.scheduleDefs.getWeekendBlocks() : ns.scheduleDefs.getBlocks(day.cocina);
+    const blocks = defs.map((def) => {
       const done = !!(day.blocks[def.id] && day.blocks[def.id].done);
       if (def.marker) return { ...def, text: "", done };
 
@@ -676,27 +697,29 @@ window.Agenda = window.Agenda || {};
         done,
       };
     });
+
+    if (isWeekend && ns.dateUtils.isoWeekday(ns.dateUtils.fromISO(dateStr)) === 5) {
+      const satGym = buildSaturdayGymBlock(dateStr);
+      if (satGym) return [satGym, ...blocks];
+    }
+    return blocks;
   }
 
   // El ítem "Correr" del checklist de fin de semana refleja, de solo
   // lectura, la distancia programada de ese domingo (si la fecha cae
-  // dentro del rango de trainingSchedule.js). El ítem "Gimnasio" refleja,
-  // igual de solo lectura, la sesión atrasada que le toca a ese sábado
-  // (si hay alguna pendiente de recuperar). Son transformaciones al
+  // dentro del rango de trainingSchedule.js). Es una transformación al
   // vuelo, para no persistir el texto calculado en el propio dato.
+  //
+  // El atraso de gimnasio del sábado YA NO vive acá: ahora es un bloque
+  // propio en la línea de tiempo de la Diaria (ver buildSaturdayGymBlock
+  // más abajo), con el mismo control "¿Entrenaste hoy?" que entre
+  // semana, en vez de una fila más de este checklist.
   function getWeekendChecklist(dateStr) {
     const items = getDay(dateStr).weekendChecklist;
     const sundayRun = ns.trainingSchedule.getSundayRunText(dateStr);
-    const saturdayGym = getSaturdayGymResolution(dateStr);
     return items.map((item) => {
       const isCorrerItem = item.key === "correr" || (item.key === undefined && item.text === "Correr");
       if (isCorrerItem && sundayRun !== undefined) return { ...item, text: sundayRun };
-
-      const isGymItem = item.text && item.text.indexOf("Gimnasio") === 0;
-      if (isGymItem && saturdayGym) {
-        const suffix = saturdayGym.status === "done" ? " — hecho" : saturdayGym.status === "skipped" ? " — no realizada" : "";
-        return { ...item, text: `Gimnasio (atrasado): ${saturdayGym.session}${suffix}`, gymStatus: saturdayGym.status };
-      }
       return item;
     });
   }
