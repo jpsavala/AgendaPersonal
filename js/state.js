@@ -253,6 +253,30 @@ window.Agenda = window.Agenda || {};
     };
   }
 
+  // Segunda corrección puntual (una sola vez): el lunes 21 de septiembre
+  // no se fue al gimnasio, y el resto de esa semana quedó por debajo de
+  // lo que la corrección anterior asumía — el usuario confirmó que, en
+  // los hechos, el sábado 26 de septiembre le toca "Empuje" (índice 2) y
+  // el lunes 28 "Pierna - Cuádriceps" (índice 3), cascada en adelante.
+  // En vez de reconstruir a mano cuál de esos días se hizo y cuál no
+  // (no hace falta: solo importa el total), se reancla la cola en el
+  // lunes 21 (inicio real de esa semana) con el puntero de esa fecha en
+  // cero, y se deja el puntero actual en 2. Así el atraso real (3
+  // sesiones en 5 días hábiles) queda registrado para que el comodín del
+  // sábado lo siga descontando de a una por vez hasta emparejarse, en
+  // vez de asumir que ya se puso al día de una sola vez.
+  function migrateGymQueueCorrection2() {
+    if (data.gymQueueCorrection2Applied) return;
+    data.gymQueueCorrection2Applied = true;
+    data.gymQueue = {
+      pointer: 2,
+      pointerAtSeed: 0,
+      seedAnchor: "2026-09-21",
+      resolutions: {},
+      unavailable: {},
+    };
+  }
+
   // Cuenta cuántos días hábiles (lunes a viernes) hay entre dos fechas,
   // ambas incluidas. Cálculo puramente de calendario, sin mirar
   // resoluciones.
@@ -442,6 +466,7 @@ window.Agenda = window.Agenda || {};
   migrateNocheBlockSplit();
   migrateGymQueue();
   migrateGymQueueCorrection();
+  migrateGymQueueCorrection2();
   migratePrioritiesToWeekTrabajo();
   persist();
 
