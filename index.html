@@ -12,6 +12,7 @@
       <span class="masthead-badge" id="masthead-badge">JP</span>
       <span class="masthead-name" id="masthead-name">Juan Pablo Savala</span>
       <span class="sync-status" id="sync-status" title="Estado de sincronización entre dispositivos"></span>
+      <button class="settings-btn" id="settings-btn" title="Configuración">⚙️</button>
     </div>
     <nav class="tabs">
       <button class="tab-button active" data-tab="diaria">Diaria</button>
@@ -36,6 +37,7 @@
   <script src="js/scheduleDefs.js"></script>
   <script src="js/userConfig.js"></script>
   <script src="js/trainingSchedule.js"></script>
+  <script src="js/userGoal.js"></script>
   <script src="js/scheduleQueue.js"></script>
   <script src="js/state.js"></script>
   <script src="js/aiBridge.js"></script>
@@ -70,6 +72,10 @@
         } else {
           sync.openLogin();
         }
+      });
+
+      document.getElementById("settings-btn").addEventListener("click", () => {
+        window.Agenda.userConfigSync.openSettings();
       });
     })();
   </script>

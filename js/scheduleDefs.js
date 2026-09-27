@@ -96,5 +96,14 @@ window.Agenda = window.Agenda || {};
     return WEEKEND_BLOCKS;
   }
 
-  ns.scheduleDefs = { getBlocks, getWeekendBlocks, setUserSchedule, clearUserSchedule };
+  // true = cuenta de onboarding (horario genérico, lista plana); false =
+  // sin sesión, o cuenta dueña migrada (horario fijo de siempre). Lo usa
+  // state.js para decidir si el contador/racha que se muestra es el
+  // fijo de la carrera de la cuenta dueña o la meta genérica de
+  // js/userGoal.js (que no le aplica en absoluto a la cuenta dueña).
+  function isOnboardingSchedule() {
+    return !!(userSchedule && userSchedule.flat);
+  }
+
+  ns.scheduleDefs = { getBlocks, getWeekendBlocks, setUserSchedule, clearUserSchedule, isOnboardingSchedule };
 })(window.Agenda);

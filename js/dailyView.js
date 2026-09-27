@@ -498,17 +498,21 @@ window.Agenda = window.Agenda || {};
       weekendSection.appendChild(addRow("Nuevo pendiente...", (val) => state.addWeekendItem(dateStr, val)));
     }
 
-    // Contador a la carrera + racha de corrida: siempre relativo a
-    // "hoy" (no a la fecha que se esté viendo), para que sea un
-    // recordatorio constante del compromiso, se mire el día que se mire.
-    const countdown = state.getRaceCountdown();
-    const streak = state.getRunStreak();
-    const runBanner = el(
-      "div",
-      { class: "run-banner" },
-      el("span", { class: "run-banner-item" }, `🏁 ${countdown.text}`),
-      el("span", { class: "run-banner-item" }, `🔥 ${streak.text}`)
-    );
+    // Contador + racha: siempre relativo a "hoy" (no a la fecha que se
+    // esté viendo), para que sea un recordatorio constante del
+    // compromiso, se mire el día que se mire. Para la cuenta dueña es su
+    // carrera de siempre; para una cuenta de onboarding, su propia meta
+    // genérica si configuró alguna (ver state.getMotivationBanner). null
+    // = no mostrar nada.
+    const banner = state.getMotivationBanner();
+    const runBanner = banner
+      ? el(
+          "div",
+          { class: "run-banner" },
+          banner.countdownText ? el("span", { class: "run-banner-item" }, `🏁 ${banner.countdownText}`) : null,
+          el("span", { class: "run-banner-item" }, `🔥 ${banner.streakText}`)
+        )
+      : null;
 
     const sections = [header, subtitle, eventsBanner, quoteBox, wordBox];
     if (!isWeekend) sections.push(cookToggle);

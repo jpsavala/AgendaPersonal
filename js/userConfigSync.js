@@ -38,8 +38,13 @@ window.Agenda = window.Agenda || {};
   let db = null;
   let uid = null;
   let overlay = null;
+  let settingsOverlay = null;
   let originalBadgeText = null;
   let originalNameText = null;
+  // Última configuración aplicada (para poder abrir la pantalla de
+  // Configuración en cualquier momento con los valores actuales, sin
+  // tener que releerlos de Firestore cada vez).
+  let currentConfig = null;
 
   function el(tag, attrs, ...children) {
     const node = document.createElement(tag);
@@ -62,22 +67,27 @@ window.Agenda = window.Agenda || {};
   // ---------- Aplicar / quitar configuración en la app ----------
   function applyConfig(cfg) {
     if (!cfg) return;
+    currentConfig = cfg;
     const badgeEl = document.getElementById("masthead-badge");
     const nameEl = document.getElementById("masthead-name");
     const profile = cfg.profile || {};
     if (nameEl && profile.nombre) nameEl.textContent = profile.nombre;
     if (badgeEl) badgeEl.textContent = profile.iniciales || ns.userConfig.initialsFrom(profile.nombre);
     ns.scheduleDefs.setUserSchedule(cfg.scheduleDefs || null);
+    ns.userGoal.setGoal(profile.meta || null);
     if (ns.app) ns.app.refreshActive();
   }
 
   function clearConfig() {
+    currentConfig = null;
     const badgeEl = document.getElementById("masthead-badge");
     const nameEl = document.getElementById("masthead-name");
     if (badgeEl && originalBadgeText !== null) badgeEl.textContent = originalBadgeText;
     if (nameEl && originalNameText !== null) nameEl.textContent = originalNameText;
     ns.scheduleDefs.clearUserSchedule();
+    ns.userGoal.clearGoal();
     closeOnboarding();
+    closeSettings();
     if (ns.app) ns.app.refreshActive();
   }
 
@@ -85,7 +95,20 @@ window.Agenda = window.Agenda || {};
   // Solo formularios estructurados (texto simple, hora, botones de
   // opción): nada de texto libre para interpretar, porque no hay IA
   // conectada todavía.
-  const TOTAL_STEPS = 6;
+  const TOTAL_STEPS = 8;
+
+  function emptyMeta() {
+    return {
+      activa: null,
+      nombre: "",
+      fecha: "",
+      actividad: "",
+      dias: ["mon", "tue", "wed", "thu", "fri"],
+      horaInicio: "",
+      horaFin: "",
+      modo: "detiene",
+    };
+  }
 
   function emptyProfile() {
     return {
@@ -97,6 +120,8 @@ window.Agenda = window.Agenda || {};
       horaComida: "",
       tieneRutinaEjercicio: null,
       bloquesPersonales: [{ inicio: "", fin: "", etiqueta: "" }],
+      meta: emptyMeta(),
+      habitos: [],
     };
   }
 
@@ -109,8 +134,12 @@ window.Agenda = window.Agenda || {};
 
   function finishOnboarding(profile) {
     const scheduleDefsCfg = ns.userConfig.buildScheduleFromOnboarding(profile);
+    // La lista de hábitos del onboarding es solo la siembra inicial (ver
+    // más abajo, con state.addHabit): de ahí en más la lista real vive
+    // en ns.state (unificada con la Diaria/Semanal), no en este perfil.
+    const habitosIniciales = (profile.habitos || []).map((h) => h.trim()).filter(Boolean);
     const cfg = {
-      profile: { ...profile, iniciales: ns.userConfig.initialsFrom(profile.nombre) },
+      profile: { ...profile, iniciales: ns.userConfig.initialsFrom(profile.nombre), habitos: [] },
       scheduleDefs: scheduleDefsCfg,
       onboarding: { complete: true, step: TOTAL_STEPS },
       updatedAt: Date.now(),
@@ -119,6 +148,13 @@ window.Agenda = window.Agenda || {};
       .set(cfg)
       .then(() => {
         applyConfig(cfg);
+        // La lista de hábitos arranca con los 3 de ejemplo del modelo de
+        // datos (Meditar/Leer/Ejercicio, pensados para la cuenta dueña
+        // original). Como esto corre una sola vez, recién creada la
+        // cuenta, se reemplazan por los que haya elegido acá (o queda
+        // vacía si no eligió ninguno) en vez de sumarse a esos 3.
+        ns.state.getHabitsDefs().forEach((h) => ns.state.removeHabit(h.id));
+        habitosIniciales.forEach((h) => ns.state.addHabit(h));
         closeOnboarding();
       })
       .catch((err) => {
@@ -143,6 +179,246 @@ window.Agenda = window.Agenda || {};
 
   function stepTitle(text) {
     return el("h3", null, text);
+  }
+
+  // Campos de la meta/evento con fecha fija: se usan tanto en el paso 6
+  // del onboarding como en la pantalla de Configuración (ver
+  // buildSettingsMetaSection), por eso `rerender` queda a cargo de quien
+  // llama (cada uno redibuja su propio contenedor distinto). Devuelve
+  // los elementos a mostrar y un `collect()` que valida y vuelca los
+  // valores de vuelta en `meta` (mutándolo), o `false` si falta algo.
+  function buildMetaFields(meta, rerender) {
+    const elements = [];
+    const nombre = el("input", {
+      type: "text",
+      class: "add-input",
+      placeholder: "Ej. Carrera 10K",
+      value: meta.nombre,
+    });
+    elements.push(el("label", { class: "field-label" }, "Nombre del evento/meta"), nombre);
+
+    const fecha = el("input", { type: "date", class: "add-input", value: meta.fecha });
+    elements.push(el("label", { class: "field-label" }, "Fecha"), fecha);
+
+    const actividad = el("input", {
+      type: "text",
+      class: "add-input",
+      placeholder: "Ej. Correr, Estudiar",
+      value: meta.actividad,
+    });
+    elements.push(el("label", { class: "field-label" }, "Actividad para prepararte"), actividad);
+
+    elements.push(el("p", { class: "muted" }, "¿Qué días de la semana la vas a realizar?"));
+    const dayChips = buildDayChips(meta.dias, (dk) => {
+      const idx = meta.dias.indexOf(dk);
+      if (idx === -1) meta.dias.push(dk);
+      else meta.dias.splice(idx, 1);
+    });
+    elements.push(dayChips);
+
+    const horaInicio = el("input", { type: "time", class: "add-input", value: meta.horaInicio });
+    const horaFin = el("input", { type: "time", class: "add-input", value: meta.horaFin });
+    elements.push(el("label", { class: "field-label" }, "Hora de inicio"), horaInicio);
+    elements.push(el("label", { class: "field-label" }, "Hora de fin"), horaFin);
+
+    elements.push(
+      el("p", { class: "muted" }, "¿Quieres que se detenga el día de la meta, o que continúe indefinidamente?")
+    );
+    const modoGroup = el("div", { class: "toggle-group" });
+    [
+      { value: "detiene", label: "Se detiene el día de la meta" },
+      { value: "continua", label: "Continúa indefinidamente" },
+    ].forEach((opt) => {
+      modoGroup.appendChild(
+        el(
+          "button",
+          {
+            class: "toggle-btn" + (meta.modo === opt.value ? " active" : ""),
+            onclick: () => {
+              meta.modo = opt.value;
+              rerender();
+            },
+          },
+          opt.label
+        )
+      );
+    });
+    elements.push(modoGroup);
+
+    const collect = () => {
+      if (!nombre.value.trim() || !fecha.value || !actividad.value.trim() || !meta.dias.length || !horaInicio.value || !horaFin.value) {
+        return false;
+      }
+      meta.nombre = nombre.value.trim();
+      meta.fecha = fecha.value;
+      meta.actividad = actividad.value.trim();
+      meta.horaInicio = horaInicio.value;
+      meta.horaFin = horaFin.value;
+      return true;
+    };
+    return { elements, collect };
+  }
+
+  // Editor de la lista de hábitos como texto libre (agregar/quitar,
+  // 0 o más): se usa en el paso 7 del onboarding (arranca una lista
+  // vacía, opcional) y en la pantalla de Configuración (ver
+  // buildSettingsHabitsSection, que en cambio opera directo sobre
+  // ns.state, ya que ahí la lista real ya existe).
+  function buildHabitsDraftEditor(habitos, rerender) {
+    const elements = [];
+    const list = el("div", { class: "check-list" });
+    habitos.forEach((texto, i) => {
+      list.appendChild(
+        el(
+          "div",
+          { class: "check-row" },
+          el("input", {
+            type: "text",
+            class: "add-input",
+            placeholder: "Ej. Meditar",
+            value: texto,
+            oninput: (e) => {
+              habitos[i] = e.target.value;
+            },
+          }),
+          el(
+            "button",
+            {
+              class: "btn-remove",
+              title: "Quitar",
+              onclick: () => {
+                habitos.splice(i, 1);
+                rerender();
+              },
+            },
+            "×"
+          )
+        )
+      );
+    });
+    elements.push(list);
+    elements.push(
+      el(
+        "button",
+        {
+          class: "btn-secondary",
+          onclick: () => {
+            habitos.push("");
+            rerender();
+          },
+        },
+        "+ Agregar otro"
+      )
+    );
+    return elements;
+  }
+
+  // Días de trabajo + franja(s) de oficina: usado por la pantalla de
+  // Configuración (ver buildSettingsModal). El paso 2 del onboarding
+  // tiene su propia copia de esto (no se tocó, para no arriesgar una
+  // regresión en un flujo ya probado).
+  function buildOfficeScheduleFields(profile, rerender) {
+    const elements = [];
+    elements.push(el("p", { class: "muted" }, "¿Qué días trabajás?"));
+    elements.push(
+      buildDayChips(profile.diasTrabajo, (dk) => {
+        const idx = profile.diasTrabajo.indexOf(dk);
+        if (idx === -1) profile.diasTrabajo.push(dk);
+        else profile.diasTrabajo.splice(idx, 1);
+      })
+    );
+
+    elements.push(el("p", { class: "muted" }, "¿Una franja continua o dos separadas (ej. mañana y tarde)?"));
+    const franjaCountGroup = el("div", { class: "toggle-group" });
+    [1, 2].forEach((n) => {
+      franjaCountGroup.appendChild(
+        el(
+          "button",
+          {
+            class: "toggle-btn" + (profile.franjasOficina.length === n ? " active" : ""),
+            onclick: () => {
+              const current = profile.franjasOficina;
+              profile.franjasOficina =
+                n === 1
+                  ? [current[0] || { inicio: "", fin: "" }]
+                  : [current[0] || { inicio: "", fin: "" }, current[1] || { inicio: "", fin: "" }];
+              rerender();
+            },
+          },
+          n === 1 ? "Una franja" : "Dos franjas"
+        )
+      );
+    });
+    elements.push(franjaCountGroup);
+
+    const franjaInputs = profile.franjasOficina.map((franja, i) => {
+      const inicio = el("input", { type: "time", class: "add-input", value: franja.inicio });
+      const fin = el("input", { type: "time", class: "add-input", value: franja.fin });
+      elements.push(el("label", { class: "field-label" }, `Franja ${i + 1}: inicio`), inicio);
+      elements.push(el("label", { class: "field-label" }, `Franja ${i + 1}: fin`), fin);
+      return { inicio, fin };
+    });
+
+    const collect = () => {
+      if (!profile.diasTrabajo.length) return false;
+      for (const { inicio, fin } of franjaInputs) {
+        if (!inicio.value || !fin.value) return false;
+      }
+      profile.franjasOficina = franjaInputs.map(({ inicio, fin }) => ({ inicio: inicio.value, fin: fin.value }));
+      return true;
+    };
+    return { elements, collect };
+  }
+
+  // Bloques de tiempo libre/personal: mismo criterio que
+  // buildOfficeScheduleFields (usado solo por Configuración; el paso 5
+  // del onboarding conserva su propia copia).
+  function buildPersonalBlocksFields(profile, rerender) {
+    const elements = [];
+    elements.push(el("p", { class: "muted" }, "¿Cuántos bloques personales querés definir (hasta 4)?"));
+    const countGroup = el("div", { class: "toggle-group" });
+    [1, 2, 3, 4].forEach((n) => {
+      countGroup.appendChild(
+        el(
+          "button",
+          {
+            class: "toggle-btn" + (profile.bloquesPersonales.length === n ? " active" : ""),
+            onclick: () => {
+              const current = profile.bloquesPersonales;
+              const next = [];
+              for (let i = 0; i < n; i += 1) next.push(current[i] || { inicio: "", fin: "", etiqueta: "" });
+              profile.bloquesPersonales = next;
+              rerender();
+            },
+          },
+          String(n)
+        )
+      );
+    });
+    elements.push(countGroup);
+
+    const bloqueInputs = profile.bloquesPersonales.map((bloque, i) => {
+      const etiqueta = el("input", { type: "text", class: "add-input", placeholder: "Ej. Lectura", value: bloque.etiqueta });
+      const inicio = el("input", { type: "time", class: "add-input", value: bloque.inicio });
+      const fin = el("input", { type: "time", class: "add-input", value: bloque.fin });
+      elements.push(el("label", { class: "field-label" }, `Bloque ${i + 1}: etiqueta`), etiqueta);
+      elements.push(el("label", { class: "field-label" }, `Bloque ${i + 1}: inicio`), inicio);
+      elements.push(el("label", { class: "field-label" }, `Bloque ${i + 1}: fin`), fin);
+      return { etiqueta, inicio, fin };
+    });
+
+    const collect = () => {
+      for (const { etiqueta, inicio, fin } of bloqueInputs) {
+        if (!etiqueta.value.trim() || !inicio.value || !fin.value) return false;
+      }
+      profile.bloquesPersonales = bloqueInputs.map(({ etiqueta, inicio, fin }) => ({
+        etiqueta: etiqueta.value.trim(),
+        inicio: inicio.value,
+        fin: fin.value,
+      }));
+      return true;
+    };
+    return { elements, collect };
   }
 
   function renderStep(stepIndex, profile, goNext, goBack) {
@@ -314,6 +590,55 @@ window.Agenda = window.Agenda || {};
         }));
         return true;
       };
+    } else if (stepIndex === 6) {
+      body.push(stepTitle("¿Tienes alguna meta o evento con fecha fija?"));
+      body.push(el("p", { class: "muted" }, "Ej. una carrera, un examen, un viaje, una presentación. Es opcional."));
+      const rerenderMeta = () => {
+        overlay.replaceChildren();
+        overlay.appendChild(buildModal(stepIndex, profile, goNext, goBack));
+      };
+      const group = el("div", { class: "toggle-group" });
+      [
+        { value: true, label: "Sí" },
+        { value: false, label: "No" },
+      ].forEach((opt) => {
+        group.appendChild(
+          el(
+            "button",
+            {
+              class: "toggle-btn" + (profile.meta.activa === opt.value ? " active" : ""),
+              onclick: () => {
+                profile.meta.activa = opt.value;
+                rerenderMeta();
+              },
+            },
+            opt.label
+          )
+        );
+      });
+      body.push(group);
+
+      let collectMeta = null;
+      if (profile.meta.activa) {
+        const { elements, collect } = buildMetaFields(profile.meta, rerenderMeta);
+        body.push(...elements);
+        collectMeta = collect;
+      }
+
+      onNext = () => {
+        if (profile.meta.activa === null) return false;
+        if (!profile.meta.activa) return true;
+        return collectMeta();
+      };
+    } else if (stepIndex === 7) {
+      body.push(stepTitle("¿Qué hábitos quieres darle seguimiento?"));
+      body.push(el("p", { class: "muted" }, "Opcional: podés agregarlos después desde la vista Diaria también."));
+      const rerenderHabitos = () => {
+        overlay.replaceChildren();
+        overlay.appendChild(buildModal(stepIndex, profile, goNext, goBack));
+      };
+      body.push(...buildHabitsDraftEditor(profile.habitos, rerenderHabitos));
+      onNext = () => true;
     }
 
     const errorMsg = el("p", { class: "auth-error" });
@@ -378,6 +703,236 @@ window.Agenda = window.Agenda || {};
     overlay = null;
   }
 
+  // ---------- Pantalla de Configuración (editar en cualquier momento) ----------
+  // A diferencia del onboarding (un asistente paso a paso, solo para la
+  // primera vez), esto muestra TODO junto en una sola pantalla para
+  // corregirlo cuando sea. Reutiliza los mismos armadores de campos que
+  // el onboarding (buildOfficeScheduleFields, buildPersonalBlocksFields,
+  // buildMetaFields) para no duplicar esa lógica dos veces.
+  function buildSettingsHabitsSection(rerenderSettings) {
+    const wrap = el("div", null, el("h4", { class: "pendientes-subtitle" }, "Hábitos"));
+    const list = el("div", { class: "check-list" });
+    ns.state.getHabitsDefs().forEach((h) => {
+      list.appendChild(
+        el(
+          "div",
+          { class: "check-row" },
+          el("span", null, h.name),
+          el(
+            "button",
+            {
+              class: "btn-remove",
+              title: "Quitar",
+              onclick: () => {
+                ns.state.removeHabit(h.id);
+                rerenderSettings();
+              },
+            },
+            "×"
+          )
+        )
+      );
+    });
+    wrap.appendChild(list);
+    const input = el("input", { type: "text", class: "add-input", placeholder: "Nuevo hábito..." });
+    const commit = () => {
+      if (input.value.trim()) {
+        ns.state.addHabit(input.value);
+        rerenderSettings();
+      }
+    };
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") commit();
+    });
+    wrap.appendChild(
+      el("div", { class: "add-row" }, input, el("button", { class: "btn-primary", onclick: commit }, "Agregar"))
+    );
+    return wrap;
+  }
+
+  // Persiste los cambios de la pantalla de Configuración. `scheduleDefs`
+  // solo se regenera para una cuenta de onboarding (horario "flat"): la
+  // cuenta dueña (u otra migrada con la estructura de 4 partes) guarda
+  // sus respuestas de perfil igual, pero su horario NO se toca — sigue
+  // siendo su propio sistema de gimnasio/corrida con progresión, tal
+  // cual estaba.
+  function saveSettings(profile, isFlatSchedule) {
+    const cfg = {
+      profile: { ...profile, iniciales: ns.userConfig.initialsFrom(profile.nombre), habitos: [] },
+      scheduleDefs: isFlatSchedule ? ns.userConfig.buildScheduleFromOnboarding(profile) : currentConfig.scheduleDefs,
+      onboarding: currentConfig.onboarding || { complete: true, step: TOTAL_STEPS },
+      updatedAt: Date.now(),
+    };
+    docRef(uid)
+      .set(cfg)
+      .then(() => {
+        applyConfig(cfg);
+        closeSettings();
+      })
+      .catch((err) => {
+        console.error("No se pudo guardar la configuración:", err);
+        alert("No se pudo guardar tu configuración. Revisa tu conexión e intenta de nuevo.");
+      });
+  }
+
+  function buildSettingsBody(profileDraft, isFlatSchedule, rerenderSettings) {
+    const body = [];
+    body.push(el("h3", null, "Configuración"));
+
+    body.push(el("label", { class: "field-label" }, "Nombre"));
+    const nombreInput = el("input", { type: "text", class: "add-input", value: profileDraft.nombre });
+    body.push(nombreInput);
+
+    let officeFields = null;
+    let personalFields = null;
+    let wakeInput = null;
+    let sleepInput = null;
+    let mealInput = null;
+
+    if (isFlatSchedule) {
+      body.push(el("label", { class: "field-label" }, "Hora de despertar"));
+      wakeInput = el("input", { type: "time", class: "add-input", value: profileDraft.horaDespertar });
+      body.push(wakeInput);
+      body.push(el("label", { class: "field-label" }, "Hora de dormir"));
+      sleepInput = el("input", { type: "time", class: "add-input", value: profileDraft.horaDormir });
+      body.push(sleepInput);
+
+      body.push(el("h4", { class: "pendientes-subtitle" }, "Horario de oficina/trabajo"));
+      officeFields = buildOfficeScheduleFields(profileDraft, rerenderSettings);
+      body.push(...officeFields.elements);
+
+      body.push(el("label", { class: "field-label" }, "Hora de comida"));
+      mealInput = el("input", { type: "time", class: "add-input", value: profileDraft.horaComida });
+      body.push(mealInput);
+
+      body.push(el("h4", { class: "pendientes-subtitle" }, "Bloques de tiempo libre/personal"));
+      personalFields = buildPersonalBlocksFields(profileDraft, rerenderSettings);
+      body.push(...personalFields.elements);
+    } else {
+      body.push(
+        el(
+          "p",
+          { class: "muted" },
+          "Tu horario de gimnasio/corrida con progresión es su propio sistema y no se edita desde acá."
+        )
+      );
+    }
+
+    body.push(el("h4", { class: "pendientes-subtitle" }, "Meta/evento con fecha"));
+    const metaGroup = el("div", { class: "toggle-group" });
+    [
+      { value: true, label: "Sí" },
+      { value: false, label: "No" },
+    ].forEach((opt) => {
+      metaGroup.appendChild(
+        el(
+          "button",
+          {
+            class: "toggle-btn" + (profileDraft.meta.activa === opt.value ? " active" : ""),
+            onclick: () => {
+              profileDraft.meta.activa = opt.value;
+              rerenderSettings();
+            },
+          },
+          opt.label
+        )
+      );
+    });
+    body.push(metaGroup);
+    let collectMeta = null;
+    if (profileDraft.meta.activa) {
+      const metaFields = buildMetaFields(profileDraft.meta, rerenderSettings);
+      body.push(...metaFields.elements);
+      collectMeta = metaFields.collect;
+    }
+
+    body.push(buildSettingsHabitsSection(rerenderSettings));
+
+    const errorMsg = el("p", { class: "auth-error" });
+    body.push(errorMsg);
+
+    const saveBtn = el(
+      "button",
+      {
+        class: "btn-primary",
+        onclick: () => {
+          const nombre = nombreInput.value.trim();
+          if (!nombre) {
+            errorMsg.textContent = "Completa tu nombre.";
+            return;
+          }
+          if (isFlatSchedule) {
+            if (!wakeInput.value || !sleepInput.value || !mealInput.value) {
+              errorMsg.textContent = "Completa horas de despertar, dormir y comida.";
+              return;
+            }
+            if (!officeFields.collect()) {
+              errorMsg.textContent = "Completa los días y horas de tu horario de oficina.";
+              return;
+            }
+            if (!personalFields.collect()) {
+              errorMsg.textContent = "Completa etiqueta y horas de cada bloque personal.";
+              return;
+            }
+          }
+          if (profileDraft.meta.activa === null) {
+            errorMsg.textContent = "Elegí si tenés una meta/evento con fecha (Sí o No).";
+            return;
+          }
+          if (profileDraft.meta.activa && !collectMeta()) {
+            errorMsg.textContent = "Completa todos los datos de tu meta/evento.";
+            return;
+          }
+          profileDraft.nombre = nombre;
+          if (isFlatSchedule) {
+            profileDraft.horaDespertar = wakeInput.value;
+            profileDraft.horaDormir = sleepInput.value;
+            profileDraft.horaComida = mealInput.value;
+          }
+          saveSettings(profileDraft, isFlatSchedule);
+        },
+      },
+      "Guardar"
+    );
+    const cancelBtn = el("button", { class: "btn-secondary", onclick: () => closeSettings() }, "Cerrar");
+    body.push(el("div", { class: "auth-actions" }, cancelBtn, saveBtn));
+
+    return el("div", { class: "modal" }, ...body);
+  }
+
+  function openSettings() {
+    if (!uid || !currentConfig) {
+      if (ns.firebaseSync) ns.firebaseSync.openLogin();
+      return;
+    }
+    if (overlay || settingsOverlay) return;
+    const profileDraft = Object.assign(emptyProfile(), JSON.parse(JSON.stringify(currentConfig.profile || {})));
+    if (!profileDraft.meta) profileDraft.meta = emptyMeta();
+    // A diferencia del onboarding (un paso que obliga a elegir Sí/No),
+    // acá una cuenta que nunca pasó por ese paso (la dueña, o una de
+    // onboarding vieja de antes de esta función) no debería quedar
+    // bloqueada para guardar cualquier otro cambio solo por no haber
+    // tocado esta sección: sin respuesta previa, se asume "No" por
+    // defecto en vez de exigir que la conteste.
+    if (profileDraft.meta.activa === null || profileDraft.meta.activa === undefined) {
+      profileDraft.meta.activa = false;
+    }
+    const isFlatSchedule = !!(currentConfig.scheduleDefs && currentConfig.scheduleDefs.flat);
+
+    settingsOverlay = el("div", { class: "modal-overlay" });
+    const rerenderSettings = () => {
+      settingsOverlay.replaceChildren();
+      settingsOverlay.appendChild(buildSettingsBody(profileDraft, isFlatSchedule, rerenderSettings));
+    };
+    settingsOverlay.appendChild(buildSettingsBody(profileDraft, isFlatSchedule, rerenderSettings));
+    document.body.appendChild(settingsOverlay);
+  }
+
+  function closeSettings() {
+    if (settingsOverlay && settingsOverlay.parentNode) settingsOverlay.parentNode.removeChild(settingsOverlay);
+    settingsOverlay = null;
+  }
+
   // ---------- Carga al iniciar sesión ----------
   function handleSignedIn(user) {
     uid = user.uid;
@@ -429,4 +984,6 @@ window.Agenda = window.Agenda || {};
   }
 
   document.addEventListener("DOMContentLoaded", init);
+
+  ns.userConfigSync = { openSettings };
 })(window.Agenda);

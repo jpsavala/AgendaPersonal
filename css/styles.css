@@ -78,6 +78,26 @@ header.app-header {
   display: none;
 }
 
+.settings-btn {
+  flex: 0 0 auto;
+  margin-left: auto;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  width: 1.9rem;
+  height: 1.9rem;
+  font-size: 0.95rem;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.settings-btn:hover {
+  border-color: var(--accent-green);
+}
+
 .sync-status.synced {
   color: var(--accent-green-light);
   border-color: var(--accent-green-light);

@@ -427,6 +427,66 @@ window.Agenda = window.Agenda || {};
     return { count: streak, text };
   }
 
+  // "Hecho" de cualquier bloque flexible en una fecha, de solo lectura
+  // (no usa getDay/toggleBlockDone para no crear el día solo por
+  // consultarlo, ver getWeekIfExists por la misma razón).
+  function isBlockDone(dateStr, blockId) {
+    const day = data.days[dateStr];
+    return !!(day && day.blocks && day.blocks[blockId] && day.blocks[blockId].done);
+  }
+
+  // ---------- Meta genérica (cuentas de onboarding): contador y racha ----------
+  // Mismo criterio que getRunStreak, pero caminando día por día hacia
+  // atrás (en vez de una tabla fija de fechas programadas): la meta
+  // genérica no tiene una lista de fechas precalculada, solo la regla
+  // "día de la semana elegido, y no pasarse de la fecha si es 'detiene'"
+  // (ver ns.userGoal.isScheduledOn). Se corta a los 400 días por las
+  // dudas, aunque en la práctica se frena solo en el primer día sin
+  // marcar.
+  function getGoalStreak(todayStr) {
+    let streak = 0;
+    let cursor = todayStr;
+    let isToday = true;
+    for (let i = 0; i < 400; i += 1) {
+      if (ns.userGoal.isScheduledOn(cursor)) {
+        const done = isBlockDone(cursor, ns.userGoal.BLOCK_ID);
+        if (isToday && !done) {
+          // hoy, todavía sin marcar: no cuenta ni rompe
+        } else if (done) {
+          streak += 1;
+        } else {
+          break;
+        }
+      }
+      isToday = false;
+      cursor = toISO(ns.dateUtils.addDays(ns.dateUtils.fromISO(cursor), -1));
+    }
+    const text =
+      streak > 0
+        ? `Llevas ${streak} día${streak === 1 ? "" : "s"} seguido${streak === 1 ? "" : "s"} sin fallar`
+        : "Empieza tu racha hoy";
+    return { count: streak, text };
+  }
+
+  // Banner de contador + racha de la vista Diaria/Semanal: para la
+  // cuenta dueña (o sin sesión iniciada) es siempre el sistema fijo de
+  // su carrera (ver js/trainingSchedule.js), sin cambios; para una
+  // cuenta de onboarding es la meta genérica que haya configurado (ver
+  // js/userGoal.js), si configuró alguna. null = no mostrar nada.
+  function getMotivationBanner() {
+    if (!ns.scheduleDefs.isOnboardingSchedule()) {
+      return { countdownText: getRaceCountdown().text, streakText: getRunStreak().text };
+    }
+    if (!ns.userGoal.getGoal()) return null;
+    const todayStr = toISO(new Date());
+    const countdownText = ns.userGoal.getCountdownText(todayStr);
+    const streakText = getGoalStreak(todayStr).text;
+    // En modo "detiene", más de un día después del evento se apaga del
+    // todo (ni contador ni racha): countdownText ya da null ahí.
+    if (countdownText === null && ns.userGoal.getGoal().modo === "detiene") return null;
+    return { countdownText, streakText };
+  }
+
   // "Prioridades del trabajo" (vista Diaria) tenía su propia lista por
   // fecha (day.priorities); ahora es la MISMA lista que "Pendientes de
   // la semana: Trabajo" de la vista Semanal. Cada prioridad existente
@@ -779,11 +839,35 @@ window.Agenda = window.Agenda || {};
       };
     });
 
+    let result = blocks;
     if (isWeekend && ns.dateUtils.isoWeekday(ns.dateUtils.fromISO(dateStr)) === 5) {
       const satGym = buildSaturdayGymBlock(dateStr);
-      if (satGym) return [satGym, ...blocks];
+      if (satGym) result = [satGym, ...result];
     }
-    return blocks;
+
+    // Bloque de la meta genérica (cuentas de onboarding, ver
+    // js/userGoal.js): igual que cualquier bloque flexible (label fijo,
+    // texto y cumplido editables día por día), solo que aparece nada más
+    // en los días/fecha que le correspondan.
+    const goalDef = ns.userGoal.getBlockForDate(dateStr);
+    if (goalDef) {
+      const goalBlock = { ...goalDef, text: getBlockText(dateStr, goalDef.id), done: isBlockDone(dateStr, goalDef.id) };
+      result = isWeekend ? [goalBlock, ...result] : insertBlockByTime(result, goalBlock);
+    }
+    return result;
+  }
+
+  // Inserta un bloque en la posición que le toca por hora de inicio
+  // ("HH:MM" o "HH:MM–HH:MM..."), para intercalarlo en la lista plana ya
+  // ordenada de una cuenta de onboarding sin tener que reordenar todo.
+  function insertBlockByTime(blocks, block) {
+    const startOf = (b) => (b.time || "").split(/[–-]/)[0].trim();
+    const start = startOf(block);
+    const idx = blocks.findIndex((b) => startOf(b) > start);
+    const copy = blocks.slice();
+    if (idx === -1) copy.push(block);
+    else copy.splice(idx, 0, block);
+    return copy;
   }
 
   // El ítem "Correr" del checklist de fin de semana refleja, de solo
@@ -1225,6 +1309,8 @@ window.Agenda = window.Agenda || {};
     setGymUnavailable,
     getRaceCountdown,
     getRunStreak,
+    getMotivationBanner,
+    isBlockDone,
     getWeekendChecklist,
     addWeekendItem,
     removeWeekendItem,

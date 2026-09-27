@@ -136,16 +136,17 @@ window.Agenda = window.Agenda || {};
       }, "Replicar semana anterior")
     );
 
-    // Contador a la carrera + racha de corrida: siempre relativo a
-    // "hoy" (no a la semana que se esté viendo), igual que en la Diaria.
-    const countdown = state.getRaceCountdown();
-    const streak = state.getRunStreak();
-    const runBanner = el(
-      "div",
-      { class: "run-banner" },
-      el("span", { class: "run-banner-item" }, `🏁 ${countdown.text}`),
-      el("span", { class: "run-banner-item" }, `🔥 ${streak.text}`)
-    );
+    // Contador + racha: siempre relativo a "hoy" (no a la semana que se
+    // esté viendo), igual que en la Diaria (ver state.getMotivationBanner).
+    const banner = state.getMotivationBanner();
+    const runBanner = banner
+      ? el(
+          "div",
+          { class: "run-banner" },
+          banner.countdownText ? el("span", { class: "run-banner-item" }, `🏁 ${banner.countdownText}`) : null,
+          el("span", { class: "run-banner-item" }, `🔥 ${banner.streakText}`)
+        )
+      : null;
 
     const daysGrid = el("div", { class: "week-days-grid" });
     days.forEach((date, i) => {
@@ -425,7 +426,9 @@ window.Agenda = window.Agenda || {};
     pendientesCard.appendChild(el("h4", { class: "pendientes-subtitle" }, "Vida personal"));
     pendientesCard.appendChild(el("p", { class: "muted" }, "Próximamente."));
 
-    container.append(header, runBanner, daysGrid, metaCard, unfinishedCard, pendientesCard, habitsCard, revisionCard);
+    container.append(
+      ...[header, runBanner, daysGrid, metaCard, unfinishedCard, pendientesCard, habitsCard, revisionCard].filter(Boolean)
+    );
   }
 
   function go(delta) {
