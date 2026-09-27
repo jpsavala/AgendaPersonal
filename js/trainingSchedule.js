@@ -62,7 +62,7 @@ window.Agenda = window.Agenda || {};
     "2026-10-25": "6.5km lento",
     "2026-11-01": "7.5km lento",
     "2026-11-08": "8.5km lento",
-    "2026-11-15": "10km lento (ensayo, sin parar)",
+    "2026-11-15": "10km lento (ensayo, marca especial)",
     "2026-11-22": "6.5km lento",
     "2026-11-29": "🏁 Carrera 10K",
   };
@@ -74,6 +74,24 @@ window.Agenda = window.Agenda || {};
     const dayKey = ns.dateUtils.DAY_KEYS[ns.dateUtils.isoWeekday(ns.dateUtils.fromISO(dateStr))];
     if (dayKey !== "sun") return undefined;
     return RUN_SUNDAYS[dateStr];
+  }
+
+  // ---------- Excepción: corrida de mañana del 30 de septiembre ----------
+  // Único día de todo el plan en el que la corrida NO va en el bloque de
+  // la tarde (19:00, queda vacío/oculto vía RUN_WEEKDAY_TEXT arriba, en
+  // ""): esa semana el gimnasio corrido hizo que ese miércoles quedara
+  // mejor justo después del gimnasio, a la mañana. Es un bloque fijo más
+  // en la línea de tiempo (mismo id "correr", así que comparte la
+  // casilla de "hecho" y entra en la racha con getProgrammedRunDates
+  // como cualquier otro día con corrida), inyectado aparte en
+  // state.getDayBlocks porque no encaja en la grilla fija de horarios de
+  // siempre. Ningún otro día usa este bloque especial de mañana.
+  const SPECIAL_MORNING_RUN = {
+    "2026-09-30": "Correr - 3.5km lento",
+  };
+
+  function getSpecialMorningRunText(dateStr) {
+    return SPECIAL_MORNING_RUN[dateStr];
   }
 
   // ---------- Contador regresivo a la carrera ----------
@@ -94,11 +112,19 @@ window.Agenda = window.Agenda || {};
   function getProgrammedRunDates(uptoStr) {
     const weekdayDates = Object.keys(RUN_WEEKDAY_TEXT).filter((d) => RUN_WEEKDAY_TEXT[d]);
     const sundayDates = Object.keys(RUN_SUNDAYS);
+    const specialDates = Object.keys(SPECIAL_MORNING_RUN);
     return weekdayDates
       .concat(sundayDates)
+      .concat(specialDates)
       .filter((d) => d <= uptoStr)
       .sort();
   }
 
-  ns.trainingSchedule = { getRunText, getSundayRunText, getRaceCountdownInfo, getProgrammedRunDates };
+  ns.trainingSchedule = {
+    getRunText,
+    getSundayRunText,
+    getSpecialMorningRunText,
+    getRaceCountdownInfo,
+    getProgrammedRunDates,
+  };
 })(window.Agenda);

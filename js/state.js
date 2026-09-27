@@ -845,6 +845,29 @@ window.Agenda = window.Agenda || {};
       if (satGym) result = [satGym, ...result];
     }
 
+    // Excepción puntual de la cuenta dueña (ver
+    // trainingSchedule.getSpecialMorningRunText): el único día de todo
+    // el plan donde la corrida va a la mañana, justo después del
+    // gimnasio, en vez de en el bloque de la tarde de siempre (que ese
+    // día queda vacío vía RUN_WEEKDAY_TEXT). No le aplica en absoluto a
+    // una cuenta de onboarding (nunca tiene bloque "gimnasio").
+    if (!ns.scheduleDefs.isOnboardingSchedule()) {
+      const specialRunText = ns.trainingSchedule.getSpecialMorningRunText(dateStr);
+      if (specialRunText) {
+        const morningRunBlock = {
+          id: "correr",
+          time: "07:00–07:30",
+          label: "Correr",
+          fixed: true,
+          text: specialRunText,
+          done: isBlockDone(dateStr, "correr"),
+        };
+        const gymIdx = result.findIndex((b) => b.id === "gimnasio");
+        const insertAt = gymIdx === -1 ? 0 : gymIdx + 1;
+        result = [...result.slice(0, insertAt), morningRunBlock, ...result.slice(insertAt)];
+      }
+    }
+
     // Bloque de la meta genérica (cuentas de onboarding, ver
     // js/userGoal.js): igual que cualquier bloque flexible (label fijo,
     // texto y cumplido editables día por día), solo que aparece nada más
