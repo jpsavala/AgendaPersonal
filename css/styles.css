@@ -647,6 +647,17 @@ h2, h3, h4 {
   color: var(--bg);
 }
 
+.check-row.unfinished-row {
+  background: rgba(169, 139, 74, 0.14);
+  border-left: 3px solid var(--accent-gold);
+  border-radius: 6px;
+  padding: 0.45rem 0.6rem;
+}
+
+.check-row.unfinished-row.moving {
+  flex-wrap: wrap;
+}
+
 .pendientes-subtitle {
   font-size: 1rem;
   margin: 0.9rem 0 0.5rem;

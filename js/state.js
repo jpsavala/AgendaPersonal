@@ -837,18 +837,16 @@ window.Agenda = window.Agenda || {};
     };
   }
 
-  function getWeek(mondayStr) {
-    if (!data.weeks[mondayStr]) {
-      data.weeks[mondayStr] = defaultWeek();
-    }
-    const week = data.weeks[mondayStr];
-    // Compatibilidad con semanas guardadas antes de esta sección.
+  // Compatibilidad con semanas guardadas antes de esta sección, antes de
+  // poder elegir bloque (antes siempre se mostraban en el de 10:00-14:00)
+  // y antes de poder asignar varios días (el día único se convierte en
+  // una lista de un solo día). Separado de getWeek para poder aplicarlo
+  // también al leer una semana ya existente sin crear una nueva si no la
+  // hubiera (ver getWeekIfExists, usado por el panel de no cumplidos de
+  // la semana anterior).
+  function normalizeWeekCompat(week) {
     if (!week.pendientesTrabajo) week.pendientesTrabajo = [];
     if (!week.pendientesPersonal) week.pendientesPersonal = [];
-    // Compatibilidad con pendientes guardados antes de poder elegir
-    // bloque: antes siempre se mostraban en el de 10:00-14:00.
-    // Compatibilidad con pendientes guardados antes de poder asignar
-    // varios días: el día único se convierte en una lista de un solo día.
     week.pendientesTrabajo.forEach((p) => {
       if (!OFFICE_BLOCK_IDS.includes(p.blockId)) p.blockId = DEFAULT_OFFICE_BLOCK_ID;
       if (!Array.isArray(p.dayKeys)) {
@@ -857,6 +855,22 @@ window.Agenda = window.Agenda || {};
       }
     });
     return week;
+  }
+
+  function getWeek(mondayStr) {
+    if (!data.weeks[mondayStr]) {
+      data.weeks[mondayStr] = defaultWeek();
+    }
+    return normalizeWeekCompat(data.weeks[mondayStr]);
+  }
+
+  // Lectura pura: a diferencia de getWeek, no crea la semana si no
+  // existe todavía (para no dejar semanas vacías guardadas solo por
+  // haberlas mirado, p. ej. al calcular los pendientes de la semana
+  // anterior de la primera semana que se usó la app).
+  function getWeekIfExists(mondayStr) {
+    const week = data.weeks[mondayStr];
+    return week ? normalizeWeekCompat(week) : null;
   }
 
   // ---------- Pendientes de la semana: Trabajo ----------
@@ -945,6 +959,49 @@ window.Agenda = window.Agenda || {};
       .getBlocks(true)
       .filter((b) => OFFICE_BLOCK_IDS.includes(b.id))
       .map((b) => ({ value: b.id, label: b.time || b.label }));
+  }
+
+  // ---------- Pendientes no cumplidos de la semana anterior ----------
+  // Listas de pendientes por semana que soportan este panel: por ahora
+  // solo "Trabajo" tiene forma de agregar ítems; "Vida personal" se
+  // incluye igual (por si en el futuro se puede cargar) para no tener
+  // que tocar esto de nuevo cuando exista.
+  const PENDIENTE_LIST_KEYS = ["pendientesTrabajo", "pendientesPersonal"];
+
+  // Todos los pendientes sin marcar de la semana INMEDIATA anterior a
+  // `mondayStr` (la que se esté mirando en la vista Semanal, no
+  // necesariamente "hoy"). Se recalcula solo con la fecha, sin guardar
+  // nada: si esa semana anterior nunca se usó, da una lista vacía.
+  function getUnfinishedPendientesFromPreviousWeek(mondayStr) {
+    const previousMonday = toISO(ns.dateUtils.addDays(ns.dateUtils.fromISO(mondayStr), -7));
+    const week = getWeekIfExists(previousMonday);
+    const items = [];
+    if (week) {
+      PENDIENTE_LIST_KEYS.forEach((listKey) => {
+        (week[listKey] || []).forEach((p) => {
+          if (!p.done) items.push({ ...p, listKey });
+        });
+      });
+    }
+    return { previousMonday, items };
+  }
+
+  // Reasigna (no duplica) un pendiente de una semana vieja a otra: lo
+  // saca de la lista de origen y lo agrega a la de destino con el
+  // día/bloque nuevos elegidos y la casilla de cumplido reiniciada.
+  function movePendienteToWeek(fromMondayStr, listKey, id, toMondayStr, dayKeys, blockId) {
+    const fromWeek = data.weeks[fromMondayStr];
+    if (!fromWeek || !Array.isArray(fromWeek[listKey])) return;
+    const idx = fromWeek[listKey].findIndex((p) => p.id === id);
+    if (idx === -1) return;
+    const [item] = fromWeek[listKey].splice(idx, 1);
+    item.done = false;
+    item.dayKeys = Array.isArray(dayKeys) ? dayKeys.filter(Boolean) : [];
+    if (listKey === "pendientesTrabajo") {
+      item.blockId = OFFICE_BLOCK_IDS.includes(blockId) ? blockId : DEFAULT_OFFICE_BLOCK_ID;
+    }
+    getWeek(toMondayStr)[listKey].push(item);
+    notify();
   }
 
   // ---------- "Prioridades del trabajo" (vista Diaria) ----------
@@ -1136,6 +1193,8 @@ window.Agenda = window.Agenda || {};
     getOfficePendientes,
     toggleOfficePendiente,
     getOfficeBlockOptions,
+    getUnfinishedPendientesFromPreviousWeek,
+    movePendienteToWeek,
     toggleWeekHabit,
     setRevisionViernes,
     getEvents,

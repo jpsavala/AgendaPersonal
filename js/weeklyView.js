@@ -6,6 +6,7 @@ window.Agenda = window.Agenda || {};
   const MEAL_BLOCK_ID = "preparar_comida";
   const ADD_NEW_MEAL_VALUE = "__add_new__";
   let addingMealDate = null;
+  let movingPendienteId = null;
 
   const DAY_LETTERS = ["L", "M", "X", "J", "V", "S", "D"];
 
@@ -121,7 +122,7 @@ window.Agenda = window.Agenda || {};
       el("button", { class: "btn-icon", onclick: () => go(1) }, "▶"),
       el("button", {
         class: "btn-secondary",
-        onclick: () => { currentMonday = dateUtils.getMonday(new Date()); addingMealDate = null; render(container); },
+        onclick: () => { currentMonday = dateUtils.getMonday(new Date()); addingMealDate = null; movingPendienteId = null; render(container); },
       }, "Esta semana"),
       el("button", {
         class: "btn-primary",
@@ -283,10 +284,84 @@ window.Agenda = window.Agenda || {};
       }, week.revisionViernes.ajuste || "")
     );
 
+    const officeBlockOptions = state.getOfficeBlockOptions();
+
+    // Pendientes no cumplidos de la semana INMEDIATA anterior a la que se
+    // esté mirando (se recalcula solo con la fecha, cada vez que se
+    // cambia de semana). "Mover a esta semana" reasigna el mismo
+    // pendiente (no lo duplica): lo saca de la semana vieja y lo agrega
+    // acá con el día/bloque nuevos y la casilla sin marcar de nuevo.
+    const { previousMonday, items: unfinishedItems } = state.getUnfinishedPendientesFromPreviousWeek(mondayStr);
+    const unfinishedCard = el(
+      "div",
+      { class: "card" },
+      el("h3", null, `Pendientes no cumplidos del ${dateUtils.formatShortRange(dateUtils.fromISO(previousMonday))}`)
+    );
+    if (unfinishedItems.length === 0) {
+      unfinishedCard.appendChild(el("p", { class: "muted" }, "Cerraste la semana pasada sin pendientes sueltos."));
+    } else {
+      const unfinishedList = el("div", { class: "check-list" });
+      unfinishedItems.forEach((item) => {
+        if (movingPendienteId === item.id) {
+          const moveDayCheckboxes = buildDayCheckboxGroup([]);
+          const moveBlockSelect =
+            item.listKey === "pendientesTrabajo"
+              ? buildBlockSelect(officeBlockOptions, officeBlockOptions[0] && officeBlockOptions[0].value)
+              : null;
+          const confirmMove = () => {
+            const selectedDays = Array.from(moveDayCheckboxes.querySelectorAll("input:checked")).map((cb) => cb.value);
+            movingPendienteId = null;
+            state.movePendienteToWeek(
+              previousMonday,
+              item.listKey,
+              item.id,
+              mondayStr,
+              selectedDays,
+              moveBlockSelect ? moveBlockSelect.value : undefined
+            );
+          };
+          const cancelMove = () => {
+            movingPendienteId = null;
+            render(container);
+          };
+          unfinishedList.appendChild(
+            el(
+              "div",
+              { class: "check-row unfinished-row moving" },
+              el("span", null, item.text),
+              moveDayCheckboxes,
+              moveBlockSelect,
+              el("button", { class: "btn-primary", onclick: confirmMove }, "Confirmar"),
+              el("button", { class: "btn-secondary", onclick: cancelMove }, "Cancelar")
+            )
+          );
+        } else {
+          unfinishedList.appendChild(
+            el(
+              "div",
+              { class: "check-row unfinished-row" },
+              el("span", null, item.text),
+              el(
+                "button",
+                {
+                  class: "btn-secondary",
+                  onclick: () => {
+                    movingPendienteId = item.id;
+                    render(container);
+                  },
+                },
+                "Mover a esta semana"
+              )
+            )
+          );
+        }
+      });
+      unfinishedCard.appendChild(unfinishedList);
+    }
+
     // Pendientes de la semana (Trabajo funcional; Vida personal, por ahora, solo en la interfaz)
     const pendientesCard = el("div", { class: "card" }, el("h3", null, "Pendientes de la semana"));
 
-    const officeBlockOptions = state.getOfficeBlockOptions();
     pendientesCard.appendChild(el("h4", { class: "pendientes-subtitle" }, "Trabajo"));
     const trabajoList = el("div", { class: "check-list" });
     state.getWeekTrabajoPendientes(mondayStr).forEach((item) => {
@@ -347,12 +422,13 @@ window.Agenda = window.Agenda || {};
     pendientesCard.appendChild(el("h4", { class: "pendientes-subtitle" }, "Vida personal"));
     pendientesCard.appendChild(el("p", { class: "muted" }, "Próximamente."));
 
-    container.append(header, runBanner, daysGrid, metaCard, pendientesCard, habitsCard, revisionCard);
+    container.append(header, runBanner, daysGrid, metaCard, unfinishedCard, pendientesCard, habitsCard, revisionCard);
   }
 
   function go(delta) {
     currentMonday = dateUtils.addDays(currentMonday, delta * 7);
     addingMealDate = null;
+    movingPendienteId = null;
     if (containerRef) render(containerRef);
   }
 
