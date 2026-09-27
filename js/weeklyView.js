@@ -246,8 +246,11 @@ window.Agenda = window.Agenda || {};
       const tbody = el("tbody");
       habitDefs.forEach((habit) => {
         const row = el("tr", null, el("td", { class: "habit-name" }, habit.name));
-        dateUtils.DAY_KEYS.forEach((dayKey) => {
-          const checked = !!(week.habits[habit.id] && week.habits[habit.id][dayKey]);
+        dateUtils.DAY_KEYS.forEach((dayKey, i) => {
+          // Mismo dato que la casilla de la Diaria para esa fecha exacta
+          // (ver state.toggleWeekHabit/isDayHabitDone): no es un estado
+          // propio de esta tabla.
+          const checked = state.isDayHabitDone(dateUtils.toISO(days[i]), habit.id);
           row.appendChild(
             el(
               "td",

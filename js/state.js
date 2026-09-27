@@ -446,7 +446,6 @@ window.Agenda = window.Agenda || {};
         if (!data.weeks[mondayStr]) {
           data.weeks[mondayStr] = {
             metaSemana: "",
-            habits: {},
             revisionViernes: { cumplido: "", ajuste: "" },
             pendientesTrabajo: [],
             pendientesPersonal: [],
@@ -466,6 +465,31 @@ window.Agenda = window.Agenda || {};
       });
   }
 
+  // Unifica el "Seguimiento de hábitos" de la Semanal (que tenía su
+  // propio estado por semana+día, week.habits[habitId][dayKey]) con la
+  // casilla de la Diaria (day.habits[habitId]): a partir de ahora es el
+  // mismo dato (ver toggleWeekHabit). Traslada cualquier casilla ya
+  // marcada en el sistema viejo a la fecha exacta que le corresponde
+  // antes de descartarlo, para no perder lo que ya se hubiera tildado.
+  function migrateWeekHabitsToDayHabits() {
+    if (data.weekHabitsMigrated) return;
+    data.weekHabitsMigrated = true;
+    Object.keys(data.weeks || {}).forEach((mondayStr) => {
+      const week = data.weeks[mondayStr];
+      if (!week || !week.habits) return;
+      Object.keys(week.habits).forEach((habitId) => {
+        Object.entries(week.habits[habitId] || {}).forEach(([dayKey, done]) => {
+          if (!done) return;
+          const idx = ns.dateUtils.DAY_KEYS.indexOf(dayKey);
+          if (idx === -1) return;
+          const dateStr = toISO(ns.dateUtils.addDays(ns.dateUtils.fromISO(mondayStr), idx));
+          getDay(dateStr).habits[habitId] = true;
+        });
+      });
+      delete week.habits;
+    });
+  }
+
   // Todas estas migraciones son idempotentes (cada una revisa su propia
   // bandera y no hace nada si ya corrió). Además de correr una vez al
   // cargar la app, se vuelven a correr cada vez que llega un estado
@@ -483,6 +507,7 @@ window.Agenda = window.Agenda || {};
     migrateGymQueueCorrection();
     migrateGymQueueCorrection2();
     migratePrioritiesToWeekTrabajo();
+    migrateWeekHabitsToDayHabits();
   }
   runMigrations();
   persist();
@@ -845,11 +870,14 @@ window.Agenda = window.Agenda || {};
     notify();
   }
 
+  function isDayHabitDone(dateStr, habitId) {
+    return !!getDay(dateStr).habits[habitId];
+  }
+
   // ---------- Semanas ----------
   function defaultWeek() {
     return {
       metaSemana: "",
-      habits: {},
       revisionViernes: { cumplido: "", ajuste: "" },
       pendientesTrabajo: [],
       pendientesPersonal: [],
@@ -1050,11 +1078,15 @@ window.Agenda = window.Agenda || {};
     persist();
   }
 
+  // La tabla de "Seguimiento de hábitos" de la Semanal marca el mismo
+  // dato que la casilla de la Diaria (day.habits[habitId]), no uno
+  // propio por semana: solo traduce columna (día de la semana) + semana
+  // que se está mirando a la fecha exacta que le corresponde.
   function toggleWeekHabit(mondayStr, habitId, dayKey) {
-    const week = getWeek(mondayStr);
-    if (!week.habits[habitId]) week.habits[habitId] = {};
-    week.habits[habitId][dayKey] = !week.habits[habitId][dayKey];
-    notify();
+    const idx = ns.dateUtils.DAY_KEYS.indexOf(dayKey);
+    if (idx === -1) return;
+    const dateStr = toISO(ns.dateUtils.addDays(ns.dateUtils.fromISO(mondayStr), idx));
+    toggleDayHabit(dateStr, habitId);
   }
 
   function setRevisionViernes(mondayStr, field, text) {
@@ -1198,6 +1230,7 @@ window.Agenda = window.Agenda || {};
     removeWeekendItem,
     toggleWeekendItem,
     toggleDayHabit,
+    isDayHabitDone,
     getWorkPriorities,
     addOfficePendienteForDate,
     removeOfficePendienteForDate,
