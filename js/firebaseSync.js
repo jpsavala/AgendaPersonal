@@ -40,7 +40,15 @@ window.Agenda = window.Agenda || {};
     appId: "1:839948107344:web:5c5129d1b0b98ab99e5b55",
   };
 
-  const LOCAL_META_KEY = "agendaPersonal_v1_syncMeta";
+  // Namespaced por cuenta igual que el respaldo local (ver
+  // js/storage.js): sin esto, el timestamp de "última sincronización"
+  // de una cuenta podía quedar pisando el de otra que inicia sesión
+  // después en el mismo dispositivo. Sin sesión iniciada (uid null) usa
+  // la clave genérica de siempre, sin cambios de comportamiento ahí.
+  const LOCAL_META_KEY_BASE = "agendaPersonal_v1_syncMeta";
+  function localMetaKey() {
+    return uid ? `${LOCAL_META_KEY_BASE}_${uid}` : LOCAL_META_KEY_BASE;
+  }
   const PUSH_DEBOUNCE_MS = 800;
 
   let db = null;
@@ -74,7 +82,7 @@ window.Agenda = window.Agenda || {};
 
   function getLocalUpdatedAt() {
     try {
-      const raw = localStorage.getItem(LOCAL_META_KEY);
+      const raw = localStorage.getItem(localMetaKey());
       return raw ? JSON.parse(raw).updatedAt || 0 : 0;
     } catch (e) {
       return 0;
@@ -83,7 +91,7 @@ window.Agenda = window.Agenda || {};
 
   function setLocalUpdatedAt(ts) {
     try {
-      localStorage.setItem(LOCAL_META_KEY, JSON.stringify({ updatedAt: ts }));
+      localStorage.setItem(localMetaKey(), JSON.stringify({ updatedAt: ts }));
     } catch (e) {
       /* localStorage no disponible: la sincronización sigue funcionando, solo sin esta caché. */
     }
@@ -320,11 +328,17 @@ window.Agenda = window.Agenda || {};
         uid = user.uid;
         userEmail = user.email;
         closeLoginModal();
+        // Pasa al respaldo local propio de esta cuenta ANTES de
+        // sincronizar: si no, se podría subir a Firebase lo que hubiera
+        // quedado en el dispositivo de antes de iniciar sesión (de otra
+        // cuenta, o del modo sin sesión), como si fuera de esta cuenta.
+        ns.state.switchStorageKey(ns.storage.keyForUid(uid));
         startSync();
       } else {
+        stopSync();
+        ns.state.switchStorageKey(ns.storage.STORAGE_KEY);
         uid = null;
         userEmail = null;
-        stopSync();
         setStatus("signed-out");
       }
     });

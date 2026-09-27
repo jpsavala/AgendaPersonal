@@ -14,12 +14,18 @@ window.Agenda = window.Agenda || {};
   const QUOTES = ns.quotes.QUOTES;
   const WORDS = ns.wordOfTheDay.WORDS;
 
-  let data = storage.load();
+  // Sin sesión iniciada, se lee/escribe la clave genérica de siempre
+  // (storage.STORAGE_KEY); al iniciar/cerrar sesión, firebaseSync llama
+  // a switchStorageKey para pasar a la clave propia de esa cuenta (o de
+  // vuelta a la genérica), así que cada una tiene su respaldo local
+  // separado en el mismo dispositivo.
+  let activeStorageKey = storage.STORAGE_KEY;
+  let data = storage.load(activeStorageKey);
   const listeners = [];
   const persistListeners = [];
 
   function persist() {
-    storage.save(data);
+    storage.save(data, activeStorageKey);
     persistListeners.forEach((fn) => fn());
   }
 
@@ -507,6 +513,19 @@ window.Agenda = window.Agenda || {};
 
   function replaceAllData(newData) {
     data = newData;
+    runMigrations();
+    notify();
+  }
+
+  // Cambia a qué respaldo local (ver js/storage.js) lee y escribe esta
+  // sesión de ahora en más, y recarga `data` desde esa clave (en blanco
+  // si es la primera vez que se usa). Lo llama firebaseSync en cada
+  // inicio/cierre de sesión: evita que la agenda de una cuenta se mezcle
+  // con la de otra, o con lo que hubiera sin sesión iniciada, en el
+  // mismo dispositivo.
+  function switchStorageKey(key) {
+    activeStorageKey = key;
+    data = storage.load(key);
     runMigrations();
     notify();
   }
@@ -1214,5 +1233,6 @@ window.Agenda = window.Agenda || {};
     onPersist,
     getRawData,
     replaceAllData,
+    switchStorageKey,
   };
 })(window.Agenda);

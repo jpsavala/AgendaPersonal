@@ -26,9 +26,21 @@ window.Agenda = window.Agenda || {};
     };
   }
 
-  function load() {
+  // Cada cuenta (uid de Firebase) tiene su propio respaldo local, en una
+  // clave separada de STORAGE_KEY (el modo sin sesión iniciada) y de la
+  // de cualquier otra cuenta que haya usado este mismo dispositivo. Sin
+  // esto, una cuenta nueva que inicia sesión en un aparato donde ya
+  // había datos guardados (propios de otra cuenta, o del modo sin
+  // sesión) podría terminar subiéndolos a Firebase como si fueran suyos
+  // (ver js/firebaseSync.js, que llama a state.switchStorageKey en cada
+  // inicio/cierre de sesión).
+  function keyForUid(uid) {
+    return "agenda_data_" + uid;
+  }
+
+  function load(key) {
     try {
-      const raw = localStorage.getItem(STORAGE_KEY);
+      const raw = localStorage.getItem(key || STORAGE_KEY);
       if (!raw) return defaultData();
       const parsed = JSON.parse(raw);
       return Object.assign(defaultData(), parsed);
@@ -38,13 +50,13 @@ window.Agenda = window.Agenda || {};
     }
   }
 
-  function save(data) {
+  function save(data, key) {
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+      localStorage.setItem(key || STORAGE_KEY, JSON.stringify(data));
     } catch (e) {
       console.error("No se pudieron guardar los datos:", e);
     }
   }
 
-  ns.storage = { load, save, defaultData, STORAGE_KEY };
+  ns.storage = { load, save, defaultData, keyForUid, STORAGE_KEY };
 })(window.Agenda);
