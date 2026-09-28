@@ -671,11 +671,21 @@ h2, h3, h4 {
 
 .add-row {
   display: flex;
+  flex-wrap: wrap;
   gap: 0.5rem;
 }
 
+/* Con más de un elemento a compartir la fila (texto + selector +
+   botón, como en "Prioridades del trabajo"), sin min-width: 0 un
+   elemento flex no se achica más allá del ancho intrínseco de su
+   contenido aunque el contenedor sea angosto — eso es lo que hacía que
+   estas filas se salieran del ancho de la pantalla en mobile en vez de
+   respetarlo. Con flex-wrap arriba, si no entran todos los elementos en
+   una sola línea, el selector y/o el botón pasan solos a la línea
+   siguiente en vez de desbordar. */
 .add-input {
-  flex: 1;
+  flex: 1 1 140px;
+  min-width: 0;
   padding: 0.5rem 0.6rem;
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -693,7 +703,12 @@ h2, h3, h4 {
   font-size: 0.82rem;
   background: var(--bg);
   color: var(--text-primary);
-  flex: 0 0 auto;
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.add-row .btn-primary {
+  flex-shrink: 0;
 }
 
 .day-checkbox-group {
