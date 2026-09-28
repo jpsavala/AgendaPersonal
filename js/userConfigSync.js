@@ -76,6 +76,7 @@ window.Agenda = window.Agenda || {};
     ns.scheduleDefs.setUserSchedule(cfg.scheduleDefs || null);
     ns.userGoal.setGoal(profile.meta || null);
     ns.palettes.apply(profile.palette || ns.palettes.DEFAULT_PALETTE_ID);
+    ns.wordLanguage.setLanguage(profile.idiomaPalabra || ns.wordLanguage.DEFAULT_LANGUAGE);
     if (ns.app) ns.app.refreshActive();
   }
 
@@ -88,6 +89,7 @@ window.Agenda = window.Agenda || {};
     ns.scheduleDefs.clearUserSchedule();
     ns.userGoal.clearGoal();
     ns.palettes.reset();
+    ns.wordLanguage.clearLanguage();
     closeOnboarding();
     closeSettings();
     if (ns.app) ns.app.refreshActive();
@@ -125,6 +127,7 @@ window.Agenda = window.Agenda || {};
       meta: emptyMeta(),
       habitos: [],
       palette: ns.palettes.DEFAULT_PALETTE_ID,
+      idiomaPalabra: ns.wordLanguage.DEFAULT_LANGUAGE,
     };
   }
 
@@ -832,6 +835,32 @@ window.Agenda = window.Agenda || {};
 
     body.push(el("h4", { class: "pendientes-subtitle" }, "Paleta de colores"));
     body.push(buildPaletteSelector(profileDraft, rerenderSettings));
+
+    body.push(el("h4", { class: "pendientes-subtitle" }, "Idioma de traducción"));
+    body.push(
+      el(
+        "p",
+        { class: "muted" },
+        "El español de \"Palabra del día\" siempre se muestra; esto elige el otro idioma."
+      )
+    );
+    const languageGroup = el("div", { class: "toggle-group" });
+    ns.wordLanguage.getAll().forEach((lang) => {
+      languageGroup.appendChild(
+        el(
+          "button",
+          {
+            class: "toggle-btn" + (profileDraft.idiomaPalabra === lang.code ? " active" : ""),
+            onclick: () => {
+              profileDraft.idiomaPalabra = lang.code;
+              rerenderSettings();
+            },
+          },
+          lang.label
+        )
+      );
+    });
+    body.push(languageGroup);
 
     let officeFields = null;
     let personalFields = null;

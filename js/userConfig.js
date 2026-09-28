@@ -50,6 +50,10 @@ window.Agenda = window.Agenda || {};
         // La cuenta dueña migra con su paleta de siempre asignada, para
         // que no se le mueva ni un color (ver js/palettes.js).
         palette: "beige-verde",
+        // Idem con el idioma de "Palabra del día": queda en inglés, que
+        // es lo que ya se mostraba, para que no se le mueva nada (ver
+        // js/wordLanguage.js).
+        idiomaPalabra: "en",
       },
       scheduleDefs: {
         fixedStart: [

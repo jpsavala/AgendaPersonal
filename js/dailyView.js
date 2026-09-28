@@ -249,7 +249,9 @@ window.Agenda = window.Agenda || {};
       el("p", { class: "quote-author" }, `— ${quote.autor}`)
     );
 
-    // Palabra del día
+    // Palabra del día: el español siempre se muestra; la segunda línea
+    // usa el idioma que la cuenta haya elegido en Configuración (inglés
+    // por defecto), nunca los dos a la vez.
     const word = state.getWordForDay(dateStr);
     const wordBox = el(
       "div",
@@ -257,7 +259,7 @@ window.Agenda = window.Agenda || {};
       el("span", { class: "quote-label" }, "Palabra del día"),
       el("p", { class: "word-text" }, word.palabra),
       el("p", { class: "word-meaning-es" }, word.significadoEs),
-      el("p", { class: "word-meaning-en" }, `EN: ${word.significadoEn}`)
+      el("p", { class: "word-meaning-en" }, ns.wordLanguage.getTranslationLine(word))
     );
 
     // Toggle "día que cocino" / "día que no cocino"
