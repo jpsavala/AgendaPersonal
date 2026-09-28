@@ -75,6 +75,7 @@ window.Agenda = window.Agenda || {};
     if (badgeEl) badgeEl.textContent = profile.iniciales || ns.userConfig.initialsFrom(profile.nombre);
     ns.scheduleDefs.setUserSchedule(cfg.scheduleDefs || null);
     ns.userGoal.setGoal(profile.meta || null);
+    ns.palettes.apply(profile.palette || ns.palettes.DEFAULT_PALETTE_ID);
     if (ns.app) ns.app.refreshActive();
   }
 
@@ -86,6 +87,7 @@ window.Agenda = window.Agenda || {};
     if (nameEl && originalNameText !== null) nameEl.textContent = originalNameText;
     ns.scheduleDefs.clearUserSchedule();
     ns.userGoal.clearGoal();
+    ns.palettes.reset();
     closeOnboarding();
     closeSettings();
     if (ns.app) ns.app.refreshActive();
@@ -95,7 +97,7 @@ window.Agenda = window.Agenda || {};
   // Solo formularios estructurados (texto simple, hora, botones de
   // opción): nada de texto libre para interpretar, porque no hay IA
   // conectada todavía.
-  const TOTAL_STEPS = 8;
+  const TOTAL_STEPS = 9;
 
   function emptyMeta() {
     return {
@@ -122,6 +124,7 @@ window.Agenda = window.Agenda || {};
       bloquesPersonales: [{ inicio: "", fin: "", etiqueta: "" }],
       meta: emptyMeta(),
       habitos: [],
+      palette: ns.palettes.DEFAULT_PALETTE_ID,
     };
   }
 
@@ -311,6 +314,41 @@ window.Agenda = window.Agenda || {};
       )
     );
     return elements;
+  }
+
+  // Selector de paleta de colores: tarjetas con una mini vista previa
+  // (círculos con los colores reales) en vez de solo el nombre. Se usa
+  // tanto en el paso de onboarding como en Configuración; siempre tiene
+  // un valor válido (arranca en la paleta por defecto), así que no hace
+  // falta validar al avanzar/guardar.
+  function buildPaletteSelector(profile, rerender) {
+    const grid = el("div", { class: "palette-grid" });
+    ns.palettes.getAll().forEach((p) => {
+      const swatches = el(
+        "div",
+        { class: "palette-swatches" },
+        el("span", { class: "palette-swatch", style: `background:${p.vars.bg}` }),
+        el("span", { class: "palette-swatch", style: `background:${p.vars.accentGreen}` }),
+        el("span", { class: "palette-swatch", style: `background:${p.vars.accentGreenLight}` }),
+        el("span", { class: "palette-swatch", style: `background:${p.vars.accentGold}` })
+      );
+      grid.appendChild(
+        el(
+          "button",
+          {
+            type: "button",
+            class: "palette-card" + (profile.palette === p.id ? " active" : ""),
+            onclick: () => {
+              profile.palette = p.id;
+              rerender();
+            },
+          },
+          swatches,
+          el("span", { class: "palette-name" }, p.nombre)
+        )
+      );
+    });
+    return grid;
   }
 
   // Días de trabajo + franja(s) de oficina: usado por la pantalla de
@@ -639,6 +677,15 @@ window.Agenda = window.Agenda || {};
       };
       body.push(...buildHabitsDraftEditor(profile.habitos, rerenderHabitos));
       onNext = () => true;
+    } else if (stepIndex === 8) {
+      body.push(stepTitle("Elegí tu paleta de colores"));
+      body.push(el("p", { class: "muted" }, "Podés cambiarla después desde Configuración."));
+      const rerenderPalette = () => {
+        overlay.replaceChildren();
+        overlay.appendChild(buildModal(stepIndex, profile, goNext, goBack));
+      };
+      body.push(buildPaletteSelector(profile, rerenderPalette));
+      onNext = () => true;
     }
 
     const errorMsg = el("p", { class: "auth-error" });
@@ -782,6 +829,9 @@ window.Agenda = window.Agenda || {};
     body.push(el("label", { class: "field-label" }, "Nombre"));
     const nombreInput = el("input", { type: "text", class: "add-input", value: profileDraft.nombre });
     body.push(nombreInput);
+
+    body.push(el("h4", { class: "pendientes-subtitle" }, "Paleta de colores"));
+    body.push(buildPaletteSelector(profileDraft, rerenderSettings));
 
     let officeFields = null;
     let personalFields = null;

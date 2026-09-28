@@ -47,6 +47,9 @@ window.Agenda = window.Agenda || {};
           { inicio: "09:00", fin: "10:00", etiqueta: "Bloque libre / paradas antes de oficina" },
           { inicio: "21:30", fin: "22:10", etiqueta: "Bloque libre" },
         ],
+        // La cuenta dueña migra con su paleta de siempre asignada, para
+        // que no se le mueva ni un color (ver js/palettes.js).
+        palette: "beige-verde",
       },
       scheduleDefs: {
         fixedStart: [

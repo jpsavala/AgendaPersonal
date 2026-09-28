@@ -98,6 +98,50 @@ header.app-header {
   border-color: var(--accent-green);
 }
 
+.palette-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 0.6rem;
+  margin: 0.5rem 0 0.9rem;
+}
+
+.palette-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  align-items: flex-start;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.7rem;
+  cursor: pointer;
+  font-family: var(--font-sans);
+  text-align: left;
+}
+
+.palette-card.active {
+  border-color: var(--accent-green);
+  border-width: 2px;
+}
+
+.palette-swatches {
+  display: flex;
+  gap: 0.3rem;
+}
+
+.palette-swatch {
+  width: 1.3rem;
+  height: 1.3rem;
+  border-radius: 50%;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  flex-shrink: 0;
+}
+
+.palette-name {
+  font-size: 0.85rem;
+  color: var(--text-primary);
+}
+
 .sync-status.synced {
   color: var(--accent-green-light);
   border-color: var(--accent-green-light);
