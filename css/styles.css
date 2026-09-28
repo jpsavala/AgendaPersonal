@@ -442,15 +442,15 @@ h2, h3, h4 {
   display: flex;
   flex-direction: column;
   gap: 0.6rem;
-  margin-bottom: 1.25rem;
+  margin-bottom: 1.1rem;
 }
 
 .schedule-block {
   background: var(--surface);
   border: 1px solid var(--border);
   border-left: 4px solid var(--border);
-  border-radius: 8px;
-  padding: 0.6rem 0.8rem;
+  border-radius: 10px;
+  padding: 1rem 1.1rem;
 }
 
 .schedule-block.highlight {
@@ -592,8 +592,14 @@ h2, h3, h4 {
 
 .daily-grid {
   display: grid;
-  grid-template-columns: 1fr;
-  gap: 1rem;
+  grid-template-columns: minmax(0, 1fr);
+  /* Sin espacio entre filas: cada tarjeta ya trae su propio
+     margin-bottom (igual que cualquier otra tarjeta de la vista), y
+     sumarle además el gap de la grilla duplicaba el espacio vertical
+     entre Hábitos y Prioridades del trabajo en mobile (una sola
+     columna). El espacio horizontal en el layout de dos columnas (ver
+     min-width: 720px) sí lo sigue dando este gap. */
+  gap: 0 1rem;
 }
 
 .card {
@@ -1016,7 +1022,7 @@ h2, h3, h4 {
 
 @media (min-width: 720px) {
   .daily-grid {
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   }
 
   .week-days-grid {
