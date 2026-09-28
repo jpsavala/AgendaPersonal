@@ -99,6 +99,11 @@ window.Agenda = window.Agenda || {};
     Object.entries(CSS_VAR_MAP).forEach(([key, cssVar]) => {
       root.setProperty(cssVar, palette.vars[key]);
     });
+    // PWA: el color de la barra de estado/navegador sigue a la paleta
+    // activa en vivo (el manifest.json en sí es estático — ver su
+    // comentario — así que esto es lo que de verdad se nota día a día).
+    const themeColorMeta = document.getElementById("theme-color-meta");
+    if (themeColorMeta) themeColorMeta.setAttribute("content", palette.vars.accentGreen);
   }
 
   // Vuelve a los valores de siempre (equivalente a "beige-verde"): lo

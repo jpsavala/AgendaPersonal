@@ -5,6 +5,16 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Agenda Personal</title>
   <link rel="stylesheet" href="css/styles.css" />
+
+  <!-- PWA: instalable en Android/Chrome y iOS/Safari (ver manifest.json y js/palettes.js, que actualiza theme-color en vivo según la paleta elegida). -->
+  <link rel="manifest" href="manifest.json" />
+  <meta name="theme-color" content="#1b4332" id="theme-color-meta" />
+  <link rel="icon" href="icons/icon-192.png" />
+  <link rel="apple-touch-icon" href="icons/icon-180.png" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Agenda" />
 </head>
 <body>
   <header class="app-header">
@@ -77,6 +87,37 @@
 
       document.getElementById("settings-btn").addEventListener("click", () => {
         window.Agenda.userConfigSync.openSettings();
+      });
+    })();
+  </script>
+
+  <script>
+    // PWA: registra el service worker (ver service-worker.js) y avisa
+    // cuando una versión nueva ya está en control pero esta pestaña
+    // sigue mostrando la vieja (recién ahí conviene recargar). En la
+    // primera instalación (sin service worker previo) no hay nada
+    // "viejo" que avisar, así que no muestra nada la primera vez.
+    (function () {
+      if (!("serviceWorker" in navigator)) return;
+
+      function showUpdateBanner() {
+        if (document.getElementById("update-banner")) return;
+        const banner = document.createElement("div");
+        banner.id = "update-banner";
+        banner.className = "update-banner";
+        banner.textContent = "Hay una actualización disponible — toca para recargar";
+        banner.addEventListener("click", () => window.location.reload());
+        document.body.appendChild(banner);
+      }
+
+      window.addEventListener("load", () => {
+        const hadControllerAlready = !!navigator.serviceWorker.controller;
+        navigator.serviceWorker
+          .register("service-worker.js")
+          .catch((err) => console.error("No se pudo registrar el service worker:", err));
+        navigator.serviceWorker.addEventListener("controllerchange", () => {
+          if (hadControllerAlready) showUpdateBanner();
+        });
       });
     })();
   </script>
