@@ -418,8 +418,16 @@ window.Agenda = window.Agenda || {};
         { class: "add-row trabajo-add-row" },
         newTrabajoInput,
         newTrabajoDayCheckboxes,
-        newTrabajoBlockSelect,
-        el("button", { class: "btn-primary", onclick: commitTrabajo }, "+ Agregar pendiente")
+        // Selector + botón agrupados: si no entran en la misma línea que
+        // lo anterior, pasan juntos a la línea siguiente en vez de
+        // desbordar (mismo criterio que en "Prioridades del trabajo" de
+        // la vista Diaria).
+        el(
+          "div",
+          { class: "add-row-actions" },
+          newTrabajoBlockSelect,
+          el("button", { class: "btn-primary", onclick: commitTrabajo }, "+ Agregar pendiente")
+        )
       )
     );
 

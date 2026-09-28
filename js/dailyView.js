@@ -427,8 +427,16 @@ window.Agenda = window.Agenda || {};
         "div",
         { class: "add-row" },
         newPriorityInput,
-        newPriorityBlockSelect,
-        el("button", { class: "btn-primary", onclick: commitPriority }, "Agregar")
+        // Selector + botón agrupados en un solo elemento flex: si los
+        // tres no entran en una línea en pantallas angostas, este grupo
+        // entero pasa a la línea siguiente (nunca se separan entre sí,
+        // ni se cortan) en vez de desbordar el ancho de la tarjeta.
+        el(
+          "div",
+          { class: "add-row-actions" },
+          newPriorityBlockSelect,
+          el("button", { class: "btn-primary", onclick: commitPriority }, "Agregar")
+        )
       )
     );
 

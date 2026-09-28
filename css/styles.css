@@ -675,16 +675,16 @@ h2, h3, h4 {
   gap: 0.5rem;
 }
 
-/* Con más de un elemento a compartir la fila (texto + selector +
-   botón, como en "Prioridades del trabajo"), sin min-width: 0 un
-   elemento flex no se achica más allá del ancho intrínseco de su
-   contenido aunque el contenedor sea angosto — eso es lo que hacía que
-   estas filas se salieran del ancho de la pantalla en mobile en vez de
-   respetarlo. Con flex-wrap arriba, si no entran todos los elementos en
-   una sola línea, el selector y/o el botón pasan solos a la línea
-   siguiente en vez de desbordar. */
+/* Sin min-width: 0, un elemento flex no se achica más allá del ancho
+   intrínseco de su contenido aunque el contenedor sea angosto — eso
+   hacía que estas filas se salieran del ancho de la pantalla en mobile
+   en vez de respetarlo. Con flex-wrap arriba, si el input y el resto no
+   entran en una sola línea, el input ocupa toda la línea y el resto
+   pasa a la siguiente (ver .add-row-actions, que agrupa selector +
+   botón para que floten juntos como un solo bloque, sin cortarse ni
+   separarse entre sí). */
 .add-input {
-  flex: 1 1 140px;
+  flex: 1 1 160px;
   min-width: 0;
   padding: 0.5rem 0.6rem;
   border: 1px solid var(--border);
@@ -693,6 +693,26 @@ h2, h3, h4 {
   font-size: 0.9rem;
   background: var(--bg);
   color: var(--text-primary);
+}
+
+/* Agrupa selector de bloque + botón "Agregar" (Prioridades del trabajo
+   en la Diaria; Pendientes de la semana: Trabajo en la Semanal) en un
+   solo elemento flex dentro de .add-row: si no entran junto al input en
+   la misma línea, este grupo entero pasa a la línea siguiente en block,
+   nunca se parte el selector de un lado y el botón del otro. */
+.add-row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  flex: 0 0 auto;
+  /* Sin esto, un elemento flex con flex: 0 0 auto se dimensiona por su
+     ancho "de una sola línea" (fit-content) aunque tenga flex-wrap: al
+     ser el único elemento en su línea dentro de .add-row, nada lo obliga
+     a respetar el ancho disponible y el selector + botón terminaban
+     desbordando igual, ahora en su propia línea. max-width: 100% lo
+     limita al ancho real disponible, recién ahí el flex-wrap interno
+     hace que el botón pase debajo del selector si hace falta. */
+  max-width: 100%;
 }
 
 .block-select {
@@ -707,7 +727,8 @@ h2, h3, h4 {
   min-width: 0;
 }
 
-.add-row .btn-primary {
+.add-row .btn-primary,
+.add-row-actions .btn-primary {
   flex-shrink: 0;
 }
 
