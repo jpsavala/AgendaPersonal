@@ -162,12 +162,13 @@ window.Agenda = window.Agenda || {};
   // normales + 1 de descarga), pero en una lista ordenada sin fecha
   // asociada. El motor genérico vive en js/scheduleQueue.js.
   const GYM_ROUND = ["Torso", "Pierna - Glúteo/Femoral", "Empuje", "Pierna - Cuádriceps", "Tracción"];
-  const GYM_QUEUE_SESSIONS = [
-    ...GYM_ROUND,
-    ...GYM_ROUND,
-    ...GYM_ROUND,
-    ...GYM_ROUND.map((s) => `${s} (descarga)`),
-  ];
+  // El número de semana va pegado al nombre de la sesión (p. ej. "Tracción
+  // S2"), no mostrado aparte, para que se vea igual en la Diaria y en la
+  // Semanal sin que cada vista tenga que recalcularlo. La semana de
+  // descarga (S4) agrega el sufijo "(descarga)" después del número.
+  const GYM_QUEUE_SESSIONS = [1, 2, 3, 4].flatMap((week) =>
+    GYM_ROUND.map((s) => (week === 4 ? `${s} S${week} (descarga)` : `${s} S${week}`))
+  );
 
   // Migración única: convierte el horario fijo anterior en el puntero
   // inicial, contando cuántas sesiones (lunes a viernes) ya habrían
@@ -280,6 +281,78 @@ window.Agenda = window.Agenda || {};
       seedAnchor: "2026-09-21",
       resolutions: {},
       unavailable: {},
+    };
+  }
+
+  // Tercera corrección puntual (una sola vez): el usuario confirmó el
+  // calendario real vigente desde el martes 29 de septiembre en
+  // adelante (fuente de verdad, provista fuera de la app). A diferencia
+  // de las dos correcciones anteriores, esta NO pisa a ciegas la cola:
+  // antes de tocar nada, se fija con qué índice de sesión resuelve HOY
+  // (y cada fecha de la tabla) la cola tal cual está, usando la misma
+  // lógica de siempre (getGymResolution). Si ya coincide con la tabla —
+  // es decir, si lo que el usuario ya vino marcando con Sí/No dio
+  // exactamente esta secuencia — no se cambia nada. Solo si hay un
+  // desvío se reancla la cola en la primera fecha de la tabla,
+  // conservando cualquier resolución ya guardada para fechas anteriores
+  // a esa (no se pierde historial) y respetando el sí/no ya elegido ese
+  // mismo día si lo hubiera (solo se corrige a qué sesión correspondía).
+  const GYM_CALENDAR_CORRECTION_2 = [
+    ["2026-09-29", 9], // Día 5 — Tracción (cierra Semana 2)
+    ["2026-09-30", 10], // Día 1 — Torso (arranca Semana 3)
+    ["2026-10-01", 11], // Día 2 — Pierna - Glúteo/Femoral
+    ["2026-10-02", 12], // Día 3 — Empuje
+    ["2026-10-05", 13], // Día 4 — Pierna - Cuádriceps
+    ["2026-10-06", 14], // Día 5 — Tracción (cierra Semana 3)
+    ["2026-10-07", 15], // Día 1 — Torso (descarga) (arranca Semana 4)
+    ["2026-10-08", 16], // Día 2 — Pierna - Glúteo/Femoral (descarga)
+    ["2026-10-09", 17], // Día 3 — Empuje (descarga)
+    ["2026-10-12", 18], // Día 4 — Pierna - Cuádriceps (descarga)
+    ["2026-10-13", 19], // Día 5 — Tracción (descarga): cierre del Bloque 5
+  ];
+
+  function migrateGymQueueCorrection3() {
+    if (data.gymQueueCorrection3Applied) return;
+    data.gymQueueCorrection3Applied = true;
+    if (!data.gymQueue) return;
+    const todayStr = toISO(new Date());
+
+    const alreadyMatches = GYM_CALENDAR_CORRECTION_2.every(([d, idx]) => {
+      const r = getGymResolution(d);
+      return r && r.index === idx;
+    });
+    if (alreadyMatches) return;
+
+    const resolutions = { ...data.gymQueue.resolutions };
+    const baseIndex = GYM_CALENDAR_CORRECTION_2[0][1];
+    GYM_CALENDAR_CORRECTION_2.forEach(([d, idx]) => {
+      if (d > todayStr) return;
+      if (d === todayStr) {
+        // Hoy: si ya se había elegido sí/no, se respeta esa elección
+        // (solo se corrige a qué sesión correspondía). Si todavía no se
+        // contestó, no se agrega nada — se deja "pendiente" de verdad,
+        // en vez de forzarlo a "hecho" antes de que el usuario responda.
+        if (resolutions[d]) resolutions[d] = { status: resolutions[d].status, index: idx };
+        return;
+      }
+      // Fechas anteriores a hoy (solo pueden darse si esta corrección
+      // recién se carga días después del despliegue): se respeta lo ya
+      // guardado, o se da por hecho si no había nada, igual que la
+      // corrección anterior.
+      const existingStatus = resolutions[d] ? resolutions[d].status : "done";
+      resolutions[d] = { status: existingStatus, index: idx };
+    });
+    let pointer = baseIndex;
+    Object.values(resolutions).forEach((r) => {
+      if (r.status === "done" && r.index + 1 > pointer) pointer = r.index + 1;
+    });
+
+    data.gymQueue = {
+      pointer: Math.min(pointer, GYM_QUEUE_SESSIONS.length),
+      pointerAtSeed: baseIndex,
+      seedAnchor: GYM_CALENDAR_CORRECTION_2[0][0],
+      resolutions,
+      unavailable: data.gymQueue.unavailable || {},
     };
   }
 
@@ -566,6 +639,7 @@ window.Agenda = window.Agenda || {};
     migrateGymQueue();
     migrateGymQueueCorrection();
     migrateGymQueueCorrection2();
+    migrateGymQueueCorrection3();
     migratePrioritiesToWeekTrabajo();
     migrateWeekHabitsToDayHabits();
   }
