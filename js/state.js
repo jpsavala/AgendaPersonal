@@ -1328,6 +1328,7 @@ window.Agenda = window.Agenda || {};
     markGymDone,
     markGymSkipped,
     editGymDay,
+    getGymResolution,
     isGymUnavailable,
     setGymUnavailable,
     getRaceCountdown,
