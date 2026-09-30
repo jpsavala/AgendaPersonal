@@ -123,7 +123,7 @@ window.Agenda = window.Agenda || {};
       franjasOficina: [{ inicio: "", fin: "" }],
       horaComida: "",
       tieneRutinaEjercicio: null,
-      bloquesPersonales: [{ inicio: "", fin: "", etiqueta: "" }],
+      bloquesPersonales: [ns.userConfig.emptyPersonalBlock()],
       meta: emptyMeta(),
       habitos: [],
       palette: ns.palettes.DEFAULT_PALETTE_ID,
@@ -411,9 +411,218 @@ window.Agenda = window.Agenda || {};
     return { elements, collect };
   }
 
-  // Bloques de tiempo libre/personal: mismo criterio que
-  // buildOfficeScheduleFields (usado solo por Configuración; el paso 5
-  // del onboarding conserva su propia copia).
+  // Configuración completa de UN bloque personal: etiqueta + las 3
+  // preguntas nuevas (días de la semana, horario único o por día, y si
+  // tiene o no campo de comentario libre). Se usa tanto desde el
+  // onboarding (paso 5) como desde Configuración — a diferencia de
+  // buildOfficeScheduleFields, esta sí se comparte entre los dos, porque
+  // duplicar un formulario con esta cantidad de ramas condicionales sería
+  // un riesgo de regresión mayor que compartirlo.
+  //
+  // Muta `bloque` in place con cada botón Sí/No (como el resto de los
+  // toggles de este archivo) y llama a `rerender` para redibujar, ya que
+  // Q1/Q2 cambian qué campos siguen apareciendo debajo. Por eso mismo la
+  // etiqueta y los horarios se escriben en `bloque` en vivo (oninput), no
+  // solo al final en `collect()`: si no, un Q1/Q2 tocado después de
+  // escribirlos perdería lo ya tipeado al reconstruir el formulario.
+  function buildPersonalBlockConfigFields(bloque, index, rerender) {
+    const elements = [];
+    // Completa los campos que falten (bloque recién creado, o uno
+    // guardado antes de que existieran estas preguntas) con los valores
+    // por defecto de siempre, mutando el objeto real para que collect()
+    // ya los tenga.
+    Object.assign(bloque, ns.userConfig.normalizePersonalBlock(bloque));
+
+    const etiqueta = el("input", {
+      type: "text",
+      class: "add-input",
+      placeholder: "Ej. Lectura",
+      value: bloque.etiqueta,
+      oninput: (e) => {
+        bloque.etiqueta = e.target.value;
+      },
+    });
+    elements.push(el("label", { class: "field-label" }, `Bloque ${index + 1}: etiqueta`), etiqueta);
+
+    elements.push(el("p", { class: "muted" }, "¿Esta actividad la realizas todos los días de la semana?"));
+    const q1Group = el("div", { class: "toggle-group" });
+    [
+      { value: true, label: "Sí" },
+      { value: false, label: "No" },
+    ].forEach((opt) => {
+      q1Group.appendChild(
+        el(
+          "button",
+          {
+            class: "toggle-btn" + (bloque.todosLosDias === opt.value ? " active" : ""),
+            onclick: () => {
+              bloque.todosLosDias = opt.value;
+              // "Sí" siempre deja los 7 días marcados. Al pasar a "No",
+              // si venía de "todos los días" (los 7 marcados) se limpia
+              // la selección para que elija de nuevo desde cero; si ya
+              // tenía elegidos algunos días propios (volvió de un "No"
+              // anterior), esos se respetan tal cual.
+              if (opt.value) bloque.dias = ns.dateUtils.DAY_KEYS.slice();
+              else if (bloque.dias.length === ns.dateUtils.DAY_KEYS.length) bloque.dias = [];
+              rerender();
+            },
+          },
+          opt.label
+        )
+      );
+    });
+    elements.push(q1Group);
+
+    if (!bloque.todosLosDias) {
+      elements.push(el("p", { class: "muted" }, "¿En qué días de la semana aplica?"));
+      elements.push(
+        buildDayChips(bloque.dias, (dk) => {
+          const idx = bloque.dias.indexOf(dk);
+          if (idx === -1) bloque.dias.push(dk);
+          else bloque.dias.splice(idx, 1);
+          rerender();
+        })
+      );
+    }
+
+    const activeDays = bloque.todosLosDias ? ns.dateUtils.DAY_KEYS : bloque.dias;
+
+    elements.push(el("p", { class: "muted" }, "¿El horario es el mismo en todos esos días?"));
+    const q2Group = el("div", { class: "toggle-group" });
+    [
+      { value: true, label: "Sí" },
+      { value: false, label: "No" },
+    ].forEach((opt) => {
+      q2Group.appendChild(
+        el(
+          "button",
+          {
+            class: "toggle-btn" + (bloque.mismoHorario === opt.value ? " active" : ""),
+            onclick: () => {
+              bloque.mismoHorario = opt.value;
+              rerender();
+            },
+          },
+          opt.label
+        )
+      );
+    });
+    elements.push(q2Group);
+
+    let horarioUnico = null;
+    const horariosPorDia = {};
+    if (bloque.mismoHorario) {
+      const inicio = el("input", {
+        type: "time",
+        class: "add-input",
+        value: bloque.inicio,
+        oninput: (e) => {
+          bloque.inicio = e.target.value;
+        },
+      });
+      const fin = el("input", {
+        type: "time",
+        class: "add-input",
+        value: bloque.fin,
+        oninput: (e) => {
+          bloque.fin = e.target.value;
+        },
+      });
+      elements.push(el("label", { class: "field-label" }, `Bloque ${index + 1}: inicio`), inicio);
+      elements.push(el("label", { class: "field-label" }, `Bloque ${index + 1}: fin`), fin);
+      horarioUnico = { inicio, fin };
+    } else if (activeDays.length) {
+      activeDays.forEach((dk) => {
+        const dayLabel = DAY_LABELS_LONG[ns.dateUtils.DAY_KEYS.indexOf(dk)];
+        const existing = bloque.horarios[dk] || { inicio: "", fin: "" };
+        bloque.horarios[dk] = existing;
+        const inicio = el("input", {
+          type: "time",
+          class: "add-input",
+          value: existing.inicio,
+          oninput: (e) => {
+            bloque.horarios[dk].inicio = e.target.value;
+          },
+        });
+        const fin = el("input", {
+          type: "time",
+          class: "add-input",
+          value: existing.fin,
+          oninput: (e) => {
+            bloque.horarios[dk].fin = e.target.value;
+          },
+        });
+        elements.push(el("label", { class: "field-label" }, `${dayLabel}: inicio`), inicio);
+        elements.push(el("label", { class: "field-label" }, `${dayLabel}: fin`), fin);
+        horariosPorDia[dk] = { inicio, fin };
+      });
+    }
+
+    elements.push(
+      el(
+        "p",
+        { class: "muted" },
+        '¿Quieres que este bloque tenga un campo de comentario libre debajo ("¿Qué vas a hacer en este bloque?"), o que sea fijo, solo con la etiqueta?'
+      )
+    );
+    // A diferencia de las preguntas 1 y 2, esta no cambia qué otros
+    // campos se muestran (nada debajo depende de la respuesta), así que
+    // no hace falta un `rerender()` completo del paso — eso destruiría
+    // cualquier horario que ya se haya tipeado más arriba, sin haberlo
+    // guardado todavía (los inputs de texto/hora solo se leen recién en
+    // `collect()`). Alcanza con marcar el botón activo a mano.
+    const q3Group = el("div", { class: "toggle-group" });
+    [
+      { value: true, label: "Con campo de comentario" },
+      { value: false, label: "Fijo, sin campo" },
+    ].forEach((opt) => {
+      const btn = el(
+        "button",
+        {
+          class: "toggle-btn" + (bloque.tieneComentario === opt.value ? " active" : ""),
+          onclick: () => {
+            bloque.tieneComentario = opt.value;
+            q3Group.querySelectorAll("button").forEach((b) => b.classList.remove("active"));
+            btn.classList.add("active");
+          },
+        },
+        opt.label
+      );
+      q3Group.appendChild(btn);
+    });
+    elements.push(q3Group);
+
+    const collect = () => {
+      if (!etiqueta.value.trim()) return false;
+      if (!bloque.todosLosDias && !bloque.dias.length) return false;
+      const result = {
+        etiqueta: etiqueta.value.trim(),
+        todosLosDias: bloque.todosLosDias,
+        dias: bloque.todosLosDias ? ns.dateUtils.DAY_KEYS.slice() : bloque.dias.slice(),
+        mismoHorario: bloque.mismoHorario,
+        inicio: "",
+        fin: "",
+        horarios: {},
+        tieneComentario: bloque.tieneComentario,
+      };
+      if (bloque.mismoHorario) {
+        if (!horarioUnico.inicio.value || !horarioUnico.fin.value) return false;
+        result.inicio = horarioUnico.inicio.value;
+        result.fin = horarioUnico.fin.value;
+      } else {
+        for (const dk of activeDays) {
+          const pair = horariosPorDia[dk];
+          if (!pair.inicio.value || !pair.fin.value) return false;
+          result.horarios[dk] = { inicio: pair.inicio.value, fin: pair.fin.value };
+        }
+      }
+      return result;
+    };
+    return { elements, collect };
+  }
+
+  // Bloques de tiempo libre/personal: usado tanto por el onboarding
+  // (paso 5) como por Configuración.
   function buildPersonalBlocksFields(profile, rerender) {
     const elements = [];
     elements.push(el("p", { class: "muted" }, "¿Cuántos bloques personales querés definir (hasta 4)?"));
@@ -427,7 +636,9 @@ window.Agenda = window.Agenda || {};
             onclick: () => {
               const current = profile.bloquesPersonales;
               const next = [];
-              for (let i = 0; i < n; i += 1) next.push(current[i] || { inicio: "", fin: "", etiqueta: "" });
+              for (let i = 0; i < n; i += 1) {
+                next.push(current[i] ? ns.userConfig.normalizePersonalBlock(current[i]) : ns.userConfig.emptyPersonalBlock());
+              }
               profile.bloquesPersonales = next;
               rerender();
             },
@@ -438,25 +649,20 @@ window.Agenda = window.Agenda || {};
     });
     elements.push(countGroup);
 
-    const bloqueInputs = profile.bloquesPersonales.map((bloque, i) => {
-      const etiqueta = el("input", { type: "text", class: "add-input", placeholder: "Ej. Lectura", value: bloque.etiqueta });
-      const inicio = el("input", { type: "time", class: "add-input", value: bloque.inicio });
-      const fin = el("input", { type: "time", class: "add-input", value: bloque.fin });
-      elements.push(el("label", { class: "field-label" }, `Bloque ${i + 1}: etiqueta`), etiqueta);
-      elements.push(el("label", { class: "field-label" }, `Bloque ${i + 1}: inicio`), inicio);
-      elements.push(el("label", { class: "field-label" }, `Bloque ${i + 1}: fin`), fin);
-      return { etiqueta, inicio, fin };
+    const blockCollectors = profile.bloquesPersonales.map((bloque, i) => {
+      const { elements: blockElements, collect } = buildPersonalBlockConfigFields(bloque, i, rerender);
+      elements.push(...blockElements);
+      return collect;
     });
 
     const collect = () => {
-      for (const { etiqueta, inicio, fin } of bloqueInputs) {
-        if (!etiqueta.value.trim() || !inicio.value || !fin.value) return false;
+      const results = [];
+      for (const collectBlock of blockCollectors) {
+        const r = collectBlock();
+        if (!r) return false;
+        results.push(r);
       }
-      profile.bloquesPersonales = bloqueInputs.map(({ etiqueta, inicio, fin }) => ({
-        etiqueta: etiqueta.value.trim(),
-        inicio: inicio.value,
-        fin: fin.value,
-      }));
+      profile.bloquesPersonales = results;
       return true;
     };
     return { elements, collect };
@@ -584,53 +790,20 @@ window.Agenda = window.Agenda || {};
       onNext = () => profile.tieneRutinaEjercicio !== null;
     } else if (stepIndex === 5) {
       body.push(stepTitle("Bloques de tiempo libre/personal"));
-      body.push(el("p", { class: "muted" }, "¿Cuántos querés definir (hasta 4)? Por ejemplo \"Lectura\" u \"Ocio\"."));
-      const countGroup = el("div", { class: "toggle-group" });
+      body.push(
+        el(
+          "p",
+          { class: "muted" },
+          "¿Cuántos querés definir (hasta 4)? Por ejemplo \"Lectura\" u \"Ocio\". Para cada uno vas a poder elegir en qué días aplica, si el horario cambia según el día, y si querés anotar algo distinto cada vez o dejarlo fijo."
+        )
+      );
       const rerenderBloques = () => {
         overlay.replaceChildren();
         overlay.appendChild(buildModal(stepIndex, profile, goNext, goBack));
       };
-      [1, 2, 3, 4].forEach((n) => {
-        countGroup.appendChild(
-          el(
-            "button",
-            {
-              class: "toggle-btn" + (profile.bloquesPersonales.length === n ? " active" : ""),
-              onclick: () => {
-                const current = profile.bloquesPersonales;
-                const next = [];
-                for (let i = 0; i < n; i += 1) next.push(current[i] || { inicio: "", fin: "", etiqueta: "" });
-                profile.bloquesPersonales = next;
-                rerenderBloques();
-              },
-            },
-            String(n)
-          )
-        );
-      });
-      body.push(countGroup);
-
-      const bloqueInputs = profile.bloquesPersonales.map((bloque, i) => {
-        const etiqueta = el("input", { type: "text", class: "add-input", placeholder: "Ej. Lectura", value: bloque.etiqueta });
-        const inicio = el("input", { type: "time", class: "add-input", value: bloque.inicio });
-        const fin = el("input", { type: "time", class: "add-input", value: bloque.fin });
-        body.push(el("label", { class: "field-label" }, `Bloque ${i + 1}: etiqueta`), etiqueta);
-        body.push(el("label", { class: "field-label" }, `Bloque ${i + 1}: inicio`), inicio);
-        body.push(el("label", { class: "field-label" }, `Bloque ${i + 1}: fin`), fin);
-        return { etiqueta, inicio, fin };
-      });
-
-      onNext = () => {
-        for (const { etiqueta, inicio, fin } of bloqueInputs) {
-          if (!etiqueta.value.trim() || !inicio.value || !fin.value) return false;
-        }
-        profile.bloquesPersonales = bloqueInputs.map(({ etiqueta, inicio, fin }) => ({
-          etiqueta: etiqueta.value.trim(),
-          inicio: inicio.value,
-          fin: fin.value,
-        }));
-        return true;
-      };
+      const { elements: bloquesElements, collect: collectBloques } = buildPersonalBlocksFields(profile, rerenderBloques);
+      body.push(...bloquesElements);
+      onNext = () => collectBloques();
     } else if (stepIndex === 6) {
       body.push(stepTitle("¿Tienes alguna meta o evento con fecha fija?"));
       body.push(el("p", { class: "muted" }, "Ej. una carrera, un examen, un viaje, una presentación. Es opcional."));

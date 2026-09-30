@@ -96,6 +96,29 @@ window.Agenda = window.Agenda || {};
     return WEEKEND_BLOCKS;
   }
 
+  // Bloques personales configurables (ver js/userConfig.js) que aplican
+  // a esta fecha puntual: filtra por día de la semana y resuelve el
+  // horario (único o por día) ya normalizado. [] si la cuenta no tiene
+  // bloques personales de este tipo (sin sesión, cuenta dueña, o
+  // cualquier horario que no sea el "flat" de onboarding).
+  function getPersonalBlocksForDate(dateStr) {
+    if (!userSchedule || !userSchedule.personalBlocks) return [];
+    const dayKey = ns.dateUtils.DAY_KEYS[ns.dateUtils.isoWeekday(ns.dateUtils.fromISO(dateStr))];
+    const result = [];
+    userSchedule.personalBlocks.forEach((b, i) => {
+      if (!b.dias || !b.dias.includes(dayKey)) return;
+      const horario = b.mismoHorario ? { inicio: b.inicio, fin: b.fin } : (b.horarios || {})[dayKey];
+      if (!horario || !horario.inicio || !horario.fin) return;
+      result.push({
+        id: `personal_${i + 1}`,
+        time: `${horario.inicio}–${horario.fin}`,
+        label: b.etiqueta && b.etiqueta.trim() ? b.etiqueta.trim() : "Bloque personal",
+        fixed: !b.tieneComentario,
+      });
+    });
+    return result;
+  }
+
   // true = cuenta de onboarding (horario genérico, lista plana); false =
   // sin sesión, o cuenta dueña migrada (horario fijo de siempre). Lo usa
   // state.js para decidir si el contador/racha que se muestra es el
@@ -105,5 +128,12 @@ window.Agenda = window.Agenda || {};
     return !!(userSchedule && userSchedule.flat);
   }
 
-  ns.scheduleDefs = { getBlocks, getWeekendBlocks, setUserSchedule, clearUserSchedule, isOnboardingSchedule };
+  ns.scheduleDefs = {
+    getBlocks,
+    getWeekendBlocks,
+    getPersonalBlocksForDate,
+    setUserSchedule,
+    clearUserSchedule,
+    isOnboardingSchedule,
+  };
 })(window.Agenda);

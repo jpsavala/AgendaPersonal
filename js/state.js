@@ -951,6 +951,27 @@ window.Agenda = window.Agenda || {};
       const goalBlock = { ...goalDef, text: getBlockText(dateStr, goalDef.id), done: isBlockDone(dateStr, goalDef.id) };
       result = isWeekend ? [goalBlock, ...result] : insertBlockByTime(result, goalBlock);
     }
+
+    // Bloques personales de onboarding/Configuración (ver
+    // js/userConfig.js: normalizePersonalBlock): cada uno decide, para
+    // esta fecha puntual, si aplica (según el día de la semana), con qué
+    // horario (único o el específico de ese día) y si tiene o no campo
+    // de comentario libre (`fixed: true` = no, mismo tratamiento visual
+    // que un bloque fijo tipo "Oficina": solo etiqueta + casilla). No le
+    // aplica a la cuenta dueña ni a ninguna migrada con horario propio
+    // (getPersonalBlocksForDate devuelve [] si no hay `personalBlocks`).
+    const personalBlocks = ns.scheduleDefs.getPersonalBlocksForDate(dateStr).map((def) => ({
+      ...def,
+      text: def.fixed ? "" : getBlockText(dateStr, def.id),
+      done: isBlockDone(dateStr, def.id),
+    }));
+    if (isWeekend) {
+      result = [...personalBlocks, ...result];
+    } else {
+      personalBlocks.forEach((personalBlock) => {
+        result = insertBlockByTime(result, personalBlock);
+      });
+    }
     return result;
   }
 

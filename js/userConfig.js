@@ -28,6 +28,57 @@ window.Agenda = window.Agenda || {};
   // sus valores actuales en vez de pasar por el onboarding.
   const OWNER_EMAIL = "juanpablosavala@gmail.com";
 
+  // Un bloque personal nuevo, recién agregado desde el onboarding o
+  // Configuración: por defecto aplica todos los días, con un único
+  // horario, y muestra el campo de comentario libre (el comportamiento
+  // que ya tenían todos los bloques personales antes de esto).
+  function emptyPersonalBlock() {
+    return {
+      etiqueta: "",
+      todosLosDias: true,
+      dias: ns.dateUtils.DAY_KEYS.slice(),
+      mismoHorario: true,
+      inicio: "",
+      fin: "",
+      horarios: {},
+      tieneComentario: true,
+    };
+  }
+
+  // Completa con los valores por defecto de arriba cualquier bloque
+  // personal que no los tenga: tanto uno recién creado (formulario a
+  // medio llenar) como uno guardado ANTES de que existieran estas
+  // preguntas ({inicio, fin, etiqueta} nomás) — ese caso migra solo,
+  // sin ningún paso aparte, como "todos los días, mismo horario, con
+  // comentario", que es exactamente el comportamiento que ya tenía.
+  function normalizePersonalBlock(bloque) {
+    const b = bloque || {};
+    const todosLosDias = b.todosLosDias !== undefined ? !!b.todosLosDias : true;
+    const dias = todosLosDias
+      ? ns.dateUtils.DAY_KEYS.slice()
+      : Array.isArray(b.dias)
+      ? b.dias.slice()
+      : ns.dateUtils.DAY_KEYS.slice();
+    const mismoHorario = b.mismoHorario !== undefined ? !!b.mismoHorario : true;
+    const horarios = {};
+    if (!mismoHorario) {
+      dias.forEach((dk) => {
+        const h = (b.horarios || {})[dk] || {};
+        horarios[dk] = { inicio: h.inicio || b.inicio || "", fin: h.fin || b.fin || "" };
+      });
+    }
+    return {
+      etiqueta: b.etiqueta || "",
+      todosLosDias,
+      dias,
+      mismoHorario,
+      inicio: b.inicio || "",
+      fin: b.fin || "",
+      horarios,
+      tieneComentario: b.tieneComentario !== undefined ? !!b.tieneComentario : true,
+    };
+  }
+
   // Copia exacta de scheduleDefs.js de hoy, como dato en vez de código.
   function buildMigratedOwnerConfig() {
     return {
@@ -122,20 +173,19 @@ window.Agenda = window.Agenda || {};
         label: "Comida",
       });
     }
-    (profile.bloquesPersonales || []).slice(0, 4).forEach((b, i) => {
-      if (!b || !b.inicio || !b.fin) return;
-      items.push({
-        id: `personal_${i + 1}`,
-        start: b.inicio,
-        time: `${b.inicio}–${b.fin}`,
-        label: b.etiqueta && b.etiqueta.trim() ? b.etiqueta.trim() : "Bloque personal",
-      });
-    });
     items.sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0));
     items.forEach((it) => delete it.start);
 
+    // Los bloques personales NO se hornean acá con un horario fijo por
+    // día (ver getPersonalBlocksForDate en scheduleDefs.js): cada uno
+    // puede aplicar solo algunos días de la semana y/o tener un horario
+    // distinto por día, así que se guardan aparte, ya normalizados, y se
+    // resuelven en vivo para la fecha que se esté mirando.
+    const personalBlocks = (profile.bloquesPersonales || []).slice(0, 4).map(normalizePersonalBlock);
+
     return {
       flat: items,
+      personalBlocks,
       weekendBlocks: [
         { id: "finde_manana", label: "Mañana" },
         { id: "finde_tarde", label: "Tarde" },
@@ -170,5 +220,7 @@ window.Agenda = window.Agenda || {};
     buildScheduleFromOnboarding,
     defaultProfile,
     initialsFrom,
+    emptyPersonalBlock,
+    normalizePersonalBlock,
   };
 })(window.Agenda);
