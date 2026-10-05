@@ -1042,20 +1042,47 @@ window.Agenda = window.Agenda || {};
     persist();
   }
 
-  // Copia el texto de todos los bloques de la semana inmediata anterior
-  // hacia la semana indicada. Es una copia única: desde este momento las
-  // dos semanas quedan completamente independientes.
+  // Copia el texto de los bloques FLEXIBLES (bloque libre, bloques
+  // personales, comida, etc.) de la semana inmediata anterior hacia la
+  // semana indicada. Es una copia única: desde este momento las dos
+  // semanas quedan completamente independientes.
+  //
+  // Gimnasio y corrida quedan afuera a propósito, aunque en la práctica
+  // casi nunca tengan texto propio guardado acá (su contenido real sale
+  // de la cola+puntero y del plan por fecha, no de este texto libre):
+  // si alguna fecha puntual llegó a tener texto manual ahí (antes de que
+  // arrancara alguno de esos dos sistemas, o fuera del rango del plan de
+  // corrida), ese texto tampoco se replica, para que esos dos bloques
+  // sigan siendo 100% automáticos en la semana nueva.
+  //
+  // "Meta de la semana", "Pendientes de la semana", "Seguimiento de
+  // hábitos" y "Revisión del viernes" viven en otra parte del dato
+  // (getWeek / data.days[].habits), que esta función ni toca.
+  const REPLICATE_EXCLUDED_BLOCK_IDS = ["gimnasio", "correr"];
+
   function weekHasAnyBlockText(mondayStr) {
     const week = data.weekBlocks && data.weekBlocks[mondayStr];
     if (!week) return false;
-    return Object.values(week).some((dayFields) => Object.values(dayFields || {}).some((text) => !!text));
+    return Object.values(week).some((dayFields) =>
+      Object.entries(dayFields || {}).some(
+        ([blockId, text]) => !REPLICATE_EXCLUDED_BLOCK_IDS.includes(blockId) && !!text
+      )
+    );
   }
 
   function replicatePreviousWeek(mondayStr) {
     const prevMondayStr = ns.dateUtils.toISO(ns.dateUtils.addDays(ns.dateUtils.fromISO(mondayStr), -7));
     const prevWeek = (data.weekBlocks && data.weekBlocks[prevMondayStr]) || {};
+    const copied = {};
+    Object.entries(prevWeek).forEach(([dayKey, dayFields]) => {
+      const filtered = {};
+      Object.entries(dayFields || {}).forEach(([blockId, text]) => {
+        if (!REPLICATE_EXCLUDED_BLOCK_IDS.includes(blockId)) filtered[blockId] = text;
+      });
+      copied[dayKey] = filtered;
+    });
     if (!data.weekBlocks) data.weekBlocks = {};
-    data.weekBlocks[mondayStr] = JSON.parse(JSON.stringify(prevWeek));
+    data.weekBlocks[mondayStr] = copied;
     notify();
   }
 

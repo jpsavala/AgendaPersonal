@@ -127,9 +127,13 @@ window.Agenda = window.Agenda || {};
       el("button", {
         class: "btn-primary",
         onclick: () => {
+          const infoConfirmed = confirm(
+            "Se copiarán solo los bloques flexibles. Gimnasio, corrida, meta, pendientes, hábitos y revisión del viernes no se copian."
+          );
+          if (!infoConfirmed) return;
           if (state.weekHasAnyBlockText(mondayStr)) {
-            const confirmed = confirm("Esto va a reemplazar lo que ya tienes capturado en esta semana, ¿continuar?");
-            if (!confirmed) return;
+            const overwriteConfirmed = confirm("Esto va a reemplazar lo que ya tienes capturado en esta semana, ¿continuar?");
+            if (!overwriteConfirmed) return;
           }
           state.replicatePreviousWeek(mondayStr);
         },
