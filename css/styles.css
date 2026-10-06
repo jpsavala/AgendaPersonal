@@ -268,6 +268,17 @@ h2, h3, h4 {
   color: var(--accent-green);
 }
 
+.btn-secondary:disabled,
+.btn-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-secondary:disabled:hover {
+  border-color: var(--border);
+  color: var(--text-primary);
+}
+
 .btn-primary {
   background: var(--accent-green);
   border: 1px solid var(--accent-green);

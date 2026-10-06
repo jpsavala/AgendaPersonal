@@ -137,7 +137,19 @@ window.Agenda = window.Agenda || {};
           }
           state.replicatePreviousWeek(mondayStr);
         },
-      }, "Replicar semana anterior")
+      }, "Replicar semana anterior"),
+      state.hasReplicateBackup(mondayStr)
+        ? el("button", {
+            class: "btn-secondary",
+            onclick: () => {
+              const confirmed = confirm(
+                "Se restaurarán los bloques flexibles de esta semana al estado previo a la réplica. Cualquier cambio que hayas hecho después de replicar en esos bloques se perderá."
+              );
+              if (!confirmed) return;
+              state.undoReplicateWeek(mondayStr);
+            },
+          }, "Deshacer réplica")
+        : el("button", { class: "btn-secondary", disabled: "disabled" }, "Nada que deshacer")
     );
 
     // Contador + racha: siempre relativo a "hoy" (no a la semana que se

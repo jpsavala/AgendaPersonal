@@ -1164,9 +1164,49 @@ window.Agenda = window.Agenda || {};
       });
       copied[dayKey] = filtered;
     });
+
+    // Respaldo para "Deshacer réplica" (ver undoReplicateWeek): guarda el
+    // único campo que esta función toca (data.weekBlocks[mondayStr]) tal
+    // cual estaba, de una sola vez, ANTES de pisarlo. Una réplica nueva
+    // sobre la misma semana reemplaza el respaldo anterior — solo se
+    // puede deshacer la última.
+    if (!data.weekReplicateBackups) data.weekReplicateBackups = {};
+    const existing = data.weekBlocks && data.weekBlocks[mondayStr];
+    data.weekReplicateBackups[mondayStr] = {
+      weekBlocks: existing ? JSON.parse(JSON.stringify(existing)) : null,
+      replicatedAt: Date.now(),
+    };
+
     if (!data.weekBlocks) data.weekBlocks = {};
     data.weekBlocks[mondayStr] = copied;
     notify();
+  }
+
+  // true si esa semana tiene un respaldo de la última réplica todavía
+  // sin deshacer (controla si el botón "Deshacer réplica" está
+  // habilitado).
+  function hasReplicateBackup(mondayStr) {
+    return !!(data.weekReplicateBackups && data.weekReplicateBackups[mondayStr]);
+  }
+
+  // Restituye data.weekBlocks[mondayStr] al estado guardado justo antes
+  // de la última réplica sobre esa semana (incluido dejarlo tal como
+  // estaba si esa semana no tenía nada todavía) y borra el respaldo, para
+  // que no se pueda aplicar dos veces. No toca gimnasio, corrida, meta,
+  // pendientes, hábitos ni revisión del viernes: ninguno de esos vive en
+  // este campo, así que la réplica nunca los tocó y deshacer tampoco.
+  function undoReplicateWeek(mondayStr) {
+    if (!hasReplicateBackup(mondayStr)) return false;
+    const backup = data.weekReplicateBackups[mondayStr];
+    if (backup.weekBlocks === null) {
+      if (data.weekBlocks) delete data.weekBlocks[mondayStr];
+    } else {
+      if (!data.weekBlocks) data.weekBlocks = {};
+      data.weekBlocks[mondayStr] = backup.weekBlocks;
+    }
+    delete data.weekReplicateBackups[mondayStr];
+    notify();
+    return true;
   }
 
   function toggleBlockDone(dateStr, blockId) {
@@ -1529,6 +1569,8 @@ window.Agenda = window.Agenda || {};
     setBlockText,
     weekHasAnyBlockText,
     replicatePreviousWeek,
+    hasReplicateBackup,
+    undoReplicateWeek,
     toggleBlockDone,
     markGymDone,
     markGymSkipped,
