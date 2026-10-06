@@ -31,8 +31,20 @@ window.Agenda = window.Agenda || {};
 (function (ns) {
   const { toISO, fromISO, addDays } = ns.dateUtils;
 
+  // El ancla es siempre "el día después de la resolución explícita más
+  // reciente que sea igual o posterior a seedAnchor" — o seedAnchor
+  // mismo si no hay ninguna. Las resoluciones ANTERIORES a seedAnchor se
+  // ignoran acá a propósito: son historial conservado solo para seguir
+  // respondiendo una consulta puntual de esa fecha exacta (ver el chequeo
+  // `explicit` al principio de resolve()), no deben hacer arrancar la
+  // simulación desde ahí ni inflar el conteo de días hábiles de
+  // makeIsValidGymDay — si lo hicieran, una corrección que reancla la
+  // cola más adelante pero conserva alguna fecha vieja ya resuelta
+  // (p. ej. para no perder un "hecho" ya registrado) volvería a simular
+  // de más todo el tramo intermedio y podría activar el comodín del
+  // sábado sin que haya atraso real.
   function anchorOf(queueState) {
-    const dates = Object.keys(queueState.resolutions);
+    const dates = Object.keys(queueState.resolutions).filter((d) => d >= queueState.seedAnchor);
     if (!dates.length) return queueState.seedAnchor;
     const last = dates.reduce((max, d) => (d > max ? d : max));
     return toISO(addDays(fromISO(last), 1));

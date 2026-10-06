@@ -356,6 +356,88 @@ window.Agenda = window.Agenda || {};
     };
   }
 
+  // Quinta corrección puntual (una sola vez): la corrección anterior
+  // había asumido que la semana del 29 sep - 6 oct se había cumplido
+  // sesión por sesión sin saltos. En los hechos, el usuario confirmó que
+  // lo último realmente hecho fue el Día 4 — Cuádriceps S2, el lunes 28
+  // de septiembre (esa fecha NO se toca); el Día 5 — Tracción S2 nunca
+  // se hizo (el sábado que entrenó solo pecho no cuenta como Empuje, y
+  // no corresponde a Tracción de ningún modo), así que el calendario
+  // anterior se había adelantado una sesión de más desde el 29 sep.
+  //
+  // Mismo criterio de siempre: primero verifica si la cola ya calcula
+  // sola la secuencia confirmada (6-20 oct); si ya coincide, no toca
+  // nada. Si no, conserva intacta cualquier resolución del 28 de
+  // septiembre hacia atrás (no se pierde ese historial), descarta lo que
+  // haya quedado de la corrección anterior en la ventana con el error (29
+  // sep - 5 oct — esos días vuelven a comportarse como "no registrados/no
+  // cumplidos", igual que cualquier día pasado sin marcar) y reancla la
+  // cola en el 6 de octubre con el Día 5 — Tracción S2 pendiente.
+  const GYM_LAST_KNOWN_GOOD_DATE = "2026-09-28";
+  const GYM_CALENDAR_CORRECTION_3 = [
+    ["2026-10-06", 9], // Día 5 — Tracción S2 (pendiente)
+    ["2026-10-07", 10], // Día 1 — Torso S3
+    ["2026-10-08", 11], // Día 2 — Pierna - Glúteo/Femoral S3
+    ["2026-10-09", 12], // Día 3 — Empuje S3
+    ["2026-10-12", 13], // Día 4 — Pierna - Cuádriceps S3
+    ["2026-10-13", 14], // Día 5 — Tracción S3
+    ["2026-10-14", 15], // Día 1 — Torso S4 (descarga)
+    ["2026-10-15", 16], // Día 2 — Pierna - Glúteo/Femoral S4 (descarga)
+    ["2026-10-16", 17], // Día 3 — Empuje S4 (descarga)
+    ["2026-10-19", 18], // Día 4 — Pierna - Cuádriceps S4 (descarga)
+    ["2026-10-20", 19], // Día 5 — Tracción S4 (descarga): cierre del Bloque 5
+  ];
+
+  function migrateGymQueueCorrection4() {
+    if (data.gymQueueCorrection4Applied) return;
+    data.gymQueueCorrection4Applied = true;
+    if (!data.gymQueue) return;
+    const todayStr = toISO(new Date());
+
+    const alreadyMatches = GYM_CALENDAR_CORRECTION_3.every(([d, idx]) => {
+      const r = getGymResolution(d);
+      return r && r.index === idx;
+    });
+    if (alreadyMatches) return;
+
+    // Arranca solo con lo resuelto hasta el 28 de septiembre inclusive
+    // (último hecho real, confirmado): cualquier resolución posterior a
+    // esa fecha que no esté en la tabla nueva de abajo (el tramo erróneo
+    // del 29 sep al 5 oct) se descarta acá, antes de aplicar la tabla.
+    const resolutions = {};
+    Object.keys(data.gymQueue.resolutions).forEach((d) => {
+      if (d <= GYM_LAST_KNOWN_GOOD_DATE) resolutions[d] = data.gymQueue.resolutions[d];
+    });
+
+    const baseIndex = GYM_CALENDAR_CORRECTION_3[0][1];
+    GYM_CALENDAR_CORRECTION_3.forEach(([d, idx]) => {
+      if (d > todayStr) return;
+      if (d === todayStr) {
+        // Hoy: si ya se había elegido sí/no, se respeta esa elección
+        // (solo se corrige a qué sesión correspondía).
+        const existing = data.gymQueue.resolutions[d];
+        if (existing) resolutions[d] = { status: existing.status, index: idx };
+        return;
+      }
+      const existing = data.gymQueue.resolutions[d];
+      const existingStatus = existing ? existing.status : "done";
+      resolutions[d] = { status: existingStatus, index: idx };
+    });
+
+    let pointer = baseIndex;
+    Object.values(resolutions).forEach((r) => {
+      if (r.status === "done" && r.index + 1 > pointer) pointer = r.index + 1;
+    });
+
+    data.gymQueue = {
+      pointer: Math.min(pointer, GYM_QUEUE_SESSIONS.length),
+      pointerAtSeed: baseIndex,
+      seedAnchor: GYM_CALENDAR_CORRECTION_3[0][0],
+      resolutions,
+      unavailable: data.gymQueue.unavailable || {},
+    };
+  }
+
   // Cuenta cuántos días hábiles (lunes a viernes) hay entre dos fechas,
   // ambas incluidas. Cálculo puramente de calendario, sin mirar
   // resoluciones.
@@ -640,6 +722,7 @@ window.Agenda = window.Agenda || {};
     migrateGymQueueCorrection();
     migrateGymQueueCorrection2();
     migrateGymQueueCorrection3();
+    migrateGymQueueCorrection4();
     migratePrioritiesToWeekTrabajo();
     migrateWeekHabitsToDayHabits();
   }
