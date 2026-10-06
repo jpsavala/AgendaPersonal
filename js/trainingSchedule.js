@@ -21,10 +21,14 @@ window.Agenda = window.Agenda || {};
     "2026-09-25": "Correr - 2.5km lento",
     "2026-09-30": "",
     "2026-10-02": "Correr - 3km lento",
-    "2026-10-07": "Correr - 4km lento + 4 rectas de 20s",
-    "2026-10-09": "Correr - 3.5km lento",
-    "2026-10-14": "Correr - 3km lento (descarga)",
-    "2026-10-16": "Correr - 3km lento (descarga)",
+    // Plan actualizado (5 oct - 29 nov 2026): reemplaza por completo lo
+    // que había de acá en adelante. Semana 16-22 nov = "baja carga",
+    // semana 23-29 nov = "taper" (sufijo entre paréntesis en cada sesión
+    // de esa semana, mismo criterio que ya se usaba para "(descarga)").
+    "2026-10-07": "Correr - 3.5km lento",
+    "2026-10-09": "Correr - 3km lento",
+    "2026-10-14": "Correr - 4km lento + 4 rectas de 20s",
+    "2026-10-16": "Correr - 3.5km lento",
     "2026-10-21": "Correr - 4.5km lento + 4 rectas de 20s",
     "2026-10-23": "Correr - 4km lento",
     "2026-10-28": "Correr - 5km lento + 4 rectas de 20s",
@@ -33,10 +37,10 @@ window.Agenda = window.Agenda || {};
     "2026-11-06": "Correr - 5km lento",
     "2026-11-11": "Correr - 5km lento + 4 rectas de 20s",
     "2026-11-13": "Correr - 5km lento",
-    "2026-11-18": "Correr - 4km lento + 4 rectas de 20s",
-    "2026-11-20": "Correr - 4km lento",
-    "2026-11-25": "Correr - 3km lento + 4 rectas de 20s",
-    "2026-11-27": "Correr - 3km muy suave",
+    "2026-11-18": "Correr - 4km lento + 4 rectas de 20s (baja carga)",
+    "2026-11-20": "Correr - 4km lento (baja carga)",
+    "2026-11-25": "Correr - 3km lento + 4 rectas de 20s (taper)",
+    "2026-11-27": "Correr - 3km muy suave (taper)",
   };
 
   // Bloque de corrida de la vista diaria entre semana (lunes a viernes,
@@ -57,14 +61,18 @@ window.Agenda = window.Agenda || {};
   const RUN_SUNDAYS = {
     "2026-09-27": "3.5km lento",
     "2026-10-04": "4.5km lento",
-    "2026-10-11": "5.5km lento",
-    "2026-10-18": "4km lento",
+    // Plan actualizado (5 oct - 29 nov 2026), igual que RUN_WEEKDAY_TEXT:
+    // el 15 nov es el ensayo (fecha fija) y el 29 nov es la carrera
+    // (fecha fija), ambos marcados en el texto para que se vean igual en
+    // cualquier vista que use getSundayRunText.
+    "2026-10-11": "4.5km lento",
+    "2026-10-18": "5.5km lento",
     "2026-10-25": "6.5km lento",
     "2026-11-01": "7.5km lento",
     "2026-11-08": "8.5km lento",
-    "2026-11-15": "10km lento (ensayo, marca especial)",
-    "2026-11-22": "6.5km lento",
-    "2026-11-29": "🏁 Carrera 10K",
+    "2026-11-15": "10km lento (ENSAYO)",
+    "2026-11-22": "6.5km lento (baja carga)",
+    "2026-11-29": "🏁 CARRERA 10K",
   };
 
   // Texto de corrida del domingo para el checklist de fin de semana.
