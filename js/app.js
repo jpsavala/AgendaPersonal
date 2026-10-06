@@ -20,12 +20,17 @@ window.Agenda = window.Agenda || {};
   }
 
   function setupTabs() {
+    // Dos juegos de botones con la misma clase/data-tab: la nav de
+    // arriba (escritorio) y la barra inferior (mobile, ver index.html).
+    // Solo una de las dos se ve en cada ancho de pantalla (CSS), pero
+    // ambas quedan sincronizadas igual — si no, cambiar de pestaña con
+    // una y después angostar/ensanchar la ventana mostraría la otra con
+    // la pestaña vieja marcada como activa.
     const buttons = document.querySelectorAll(".tab-button");
     buttons.forEach((btn) => {
       btn.addEventListener("click", () => {
-        buttons.forEach((b) => b.classList.remove("active"));
-        btn.classList.add("active");
         activeTab = btn.dataset.tab;
+        buttons.forEach((b) => b.classList.toggle("active", b.dataset.tab === activeTab));
         mountActive();
       });
     });

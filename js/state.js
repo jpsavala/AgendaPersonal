@@ -1331,6 +1331,93 @@ window.Agenda = window.Agenda || {};
     notify();
   }
 
+  // ---------- Pendientes de la semana: Vida personal ----------
+  // Mismo criterio que "Trabajo" (día(s) asignados, opcional), pero sin
+  // bloque de oficina: un pendiente personal no vive en un horario de
+  // oficina específico. getUnfinishedPendientesFromPreviousWeek y
+  // movePendienteToWeek ya sabían tratar esta lista de forma genérica
+  // (ver PENDIENTE_LIST_KEYS más abajo); lo único que faltaba era poder
+  // crear uno — hasta ahora solo llegaban acá reasignados desde la
+  // semana anterior. Ver también addInboxItem/assignInboxItem: la
+  // Bandeja de entrada de captura rápida usa esta misma función.
+  function getWeekPersonalPendientes(mondayStr) {
+    return getWeek(mondayStr).pendientesPersonal;
+  }
+
+  function addWeekPersonalPendiente(mondayStr, text, dayKeys) {
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    const keys = Array.isArray(dayKeys) ? dayKeys.filter(Boolean) : dayKeys ? [dayKeys] : [];
+    getWeek(mondayStr).pendientesPersonal.push({
+      id: uid("wp"),
+      text: trimmed,
+      done: false,
+      dayKeys: keys,
+    });
+    notify();
+  }
+
+  function removeWeekPersonalPendiente(mondayStr, id) {
+    const week = getWeek(mondayStr);
+    week.pendientesPersonal = week.pendientesPersonal.filter((p) => p.id !== id);
+    notify();
+  }
+
+  function toggleWeekPersonalPendiente(mondayStr, id) {
+    const week = getWeek(mondayStr);
+    const p = week.pendientesPersonal.find((p) => p.id === id);
+    if (p) p.done = !p.done;
+    notify();
+  }
+
+  function toggleWeekPersonalPendienteDay(mondayStr, id, dayKey) {
+    const week = getWeek(mondayStr);
+    const p = week.pendientesPersonal.find((p) => p.id === id);
+    if (!p) return;
+    const idx = p.dayKeys.indexOf(dayKey);
+    if (idx === -1) p.dayKeys.push(dayKey);
+    else p.dayKeys.splice(idx, 1);
+    notify();
+  }
+
+  // ---------- Bandeja de entrada (captura rápida) ----------
+  // Lista simple de texto sin asignar, pensada para el botón flotante
+  // "+" (ver js/quickCapture.js): anotar algo en dos segundos, sin
+  // elegir todavía si es de trabajo o personal ni qué día. Vive en el
+  // mismo documento de datos (namespaced por UID), así que sincroniza
+  // con Firebase igual que el resto — una cuenta existente simplemente
+  // no tiene `data.inboxItems` todavía, y arranca como [] sola, sin
+  // ningún paso de migración aparte.
+  function getInboxItems() {
+    return (data.inboxItems || []).slice();
+  }
+
+  function addInboxItem(text) {
+    const trimmed = (text || "").trim();
+    if (!trimmed) return;
+    if (!data.inboxItems) data.inboxItems = [];
+    data.inboxItems.push({ id: uid("inbox"), text: trimmed, createdAt: Date.now() });
+    notify();
+  }
+
+  function removeInboxItem(id) {
+    if (!data.inboxItems) return;
+    data.inboxItems = data.inboxItems.filter((it) => it.id !== id);
+    notify();
+  }
+
+  // Saca el ítem de la Bandeja y lo agrega a los pendientes de la semana
+  // indicada, en la lista que corresponda ("trabajo" o "personal"). No
+  // es una copia: si por algún motivo no hay texto (ítem ya borrado), no
+  // hace nada.
+  function assignInboxItem(id, listKey, mondayStr, dayKeys, blockId) {
+    const item = (data.inboxItems || []).find((it) => it.id === id);
+    if (!item) return;
+    if (listKey === "trabajo") addWeekTrabajoPendiente(mondayStr, item.text, dayKeys, blockId);
+    else addWeekPersonalPendiente(mondayStr, item.text, dayKeys);
+    removeInboxItem(id);
+  }
+
   // Pendientes de trabajo de ESTA fecha específica asignados a su día de
   // la semana y al bloque de oficina indicado, dentro de la semana a la
   // que pertenece esa fecha.
@@ -1599,6 +1686,15 @@ window.Agenda = window.Agenda || {};
     toggleWeekTrabajoPendiente,
     toggleWeekTrabajoPendienteDay,
     setWeekTrabajoPendienteBlock,
+    getWeekPersonalPendientes,
+    addWeekPersonalPendiente,
+    removeWeekPersonalPendiente,
+    toggleWeekPersonalPendiente,
+    toggleWeekPersonalPendienteDay,
+    getInboxItems,
+    addInboxItem,
+    removeInboxItem,
+    assignInboxItem,
     getOfficePendientes,
     toggleOfficePendiente,
     getOfficeBlockOptions,

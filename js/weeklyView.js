@@ -7,6 +7,14 @@ window.Agenda = window.Agenda || {};
   const ADD_NEW_MEAL_VALUE = "__add_new__";
   let addingMealDate = null;
   let movingPendienteId = null;
+  // Bandeja de entrada (captura rápida, ver js/quickCapture.js): arranca
+  // cerrada cada vez que se carga la página (como addingMealDate/
+  // movingPendienteId, estado puramente de esta sesión); "categoría"
+  // elegida por ítem (trabajo/personal) antes de asignarlo, para poder
+  // mostrar u ocultar el selector de bloque de oficina sin tener que
+  // guardar nada todavía.
+  let inboxExpanded = false;
+  const inboxCategoryByItem = {};
 
   const DAY_LETTERS = ["L", "M", "X", "J", "V", "S", "D"];
 
@@ -105,6 +113,95 @@ window.Agenda = window.Agenda || {};
     select.appendChild(el("option", { value: ADD_NEW_MEAL_VALUE }, "+ Agregar nueva..."));
     select.value = currentText || "";
     return select;
+  }
+
+  // Bandeja de entrada: lo que se anotó con el botón flotante "+" (ver
+  // js/quickCapture.js) y todavía no se asignó a trabajo/personal. Vive
+  // DENTRO de "Pendientes de la semana" (discreta, colapsada, con
+  // contador) y solo se muestra si hay algo sin asignar. Asignar un
+  // ítem lo saca de acá y lo agrega a la lista de pendientes de la
+  // semana que se esté mirando (mondayStr), con el mismo selector de
+  // día(s) + bloque que ya usa "Trabajo".
+  function buildInboxSection(container, mondayStr, officeBlockOptions) {
+    const items = state.getInboxItems();
+    if (!items.length) return null;
+
+    const wrap = el("div", { class: "inbox-section" });
+    wrap.appendChild(
+      el(
+        "button",
+        {
+          class: "inbox-toggle",
+          onclick: () => {
+            inboxExpanded = !inboxExpanded;
+            render(container);
+          },
+        },
+        `${inboxExpanded ? "▾" : "▸"} Bandeja de entrada (${items.length})`
+      )
+    );
+    if (!inboxExpanded) return wrap;
+
+    const list = el("div", { class: "check-list inbox-list" });
+    items.forEach((item) => {
+      const categoria = inboxCategoryByItem[item.id] || "trabajo";
+      const dayCheckboxes = buildDayCheckboxGroup([]);
+      const blockSelect =
+        categoria === "trabajo"
+          ? buildBlockSelect(officeBlockOptions, officeBlockOptions[0] && officeBlockOptions[0].value)
+          : null;
+
+      const categoryGroup = el(
+        "div",
+        { class: "toggle-group inbox-category-group" },
+        el(
+          "button",
+          {
+            class: "toggle-btn" + (categoria === "trabajo" ? " active" : ""),
+            onclick: () => {
+              inboxCategoryByItem[item.id] = "trabajo";
+              render(container);
+            },
+          },
+          "Trabajo"
+        ),
+        el(
+          "button",
+          {
+            class: "toggle-btn" + (categoria === "personal" ? " active" : ""),
+            onclick: () => {
+              inboxCategoryByItem[item.id] = "personal";
+              render(container);
+            },
+          },
+          "Vida personal"
+        )
+      );
+
+      const assign = () => {
+        const selectedDays = Array.from(dayCheckboxes.querySelectorAll("input:checked")).map((cb) => cb.value);
+        state.assignInboxItem(item.id, categoria, mondayStr, selectedDays, blockSelect ? blockSelect.value : undefined);
+      };
+
+      list.appendChild(
+        el(
+          "div",
+          { class: "check-row inbox-row" },
+          el("span", null, item.text),
+          categoryGroup,
+          dayCheckboxes,
+          blockSelect,
+          el("button", { class: "btn-primary", onclick: assign }, "Asignar"),
+          el(
+            "button",
+            { class: "btn-remove", title: "Descartar", onclick: () => state.removeInboxItem(item.id) },
+            "×"
+          )
+        )
+      );
+    });
+    wrap.appendChild(list);
+    return wrap;
   }
 
   function render(container) {
@@ -383,8 +480,10 @@ window.Agenda = window.Agenda || {};
       unfinishedCard.appendChild(unfinishedList);
     }
 
-    // Pendientes de la semana (Trabajo funcional; Vida personal, por ahora, solo en la interfaz)
+    // Pendientes de la semana
     const pendientesCard = el("div", { class: "card" }, el("h3", null, "Pendientes de la semana"));
+    const inboxSection = buildInboxSection(container, mondayStr, officeBlockOptions);
+    if (inboxSection) pendientesCard.appendChild(inboxSection);
 
     pendientesCard.appendChild(el("h4", { class: "pendientes-subtitle" }, "Trabajo"));
     const trabajoList = el("div", { class: "check-list" });
@@ -451,8 +550,42 @@ window.Agenda = window.Agenda || {};
       )
     );
 
+    // "Vida personal": mismo criterio que "Trabajo" pero sin bloque de
+    // oficina (no aplica). Por ahora solo llegan acá pendientes
+    // reasignados desde la semana anterior o asignados desde la Bandeja
+    // de entrada (ver buildInboxSection) — sin ninguno todavía, se deja
+    // el aviso de siempre en vez de una lista vacía.
     pendientesCard.appendChild(el("h4", { class: "pendientes-subtitle" }, "Vida personal"));
-    pendientesCard.appendChild(el("p", { class: "muted" }, "Próximamente."));
+    const personalPendientes = state.getWeekPersonalPendientes(mondayStr);
+    if (!personalPendientes.length) {
+      pendientesCard.appendChild(el("p", { class: "muted" }, "Próximamente."));
+    } else {
+      const personalList = el("div", { class: "check-list" });
+      personalPendientes.forEach((item) => {
+        const dayCheckboxes = buildDayCheckboxGroup(item.dayKeys, (dk) =>
+          state.toggleWeekPersonalPendienteDay(mondayStr, item.id, dk)
+        );
+        personalList.appendChild(
+          el(
+            "div",
+            { class: "check-row" + (item.done ? " done" : "") },
+            el("input", {
+              type: "checkbox",
+              checked: item.done ? "checked" : null,
+              onchange: () => state.toggleWeekPersonalPendiente(mondayStr, item.id),
+            }),
+            el("span", null, item.text),
+            dayCheckboxes,
+            el("button", {
+              class: "btn-remove",
+              title: "Quitar pendiente",
+              onclick: () => state.removeWeekPersonalPendiente(mondayStr, item.id),
+            }, "×")
+          )
+        );
+      });
+      pendientesCard.appendChild(personalList);
+    }
 
     container.append(
       ...[header, runBanner, daysGrid, metaCard, unfinishedCard, pendientesCard, habitsCard, revisionCard].filter(Boolean)

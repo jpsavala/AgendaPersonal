@@ -37,6 +37,55 @@
     <div id="view-container"></div>
   </main>
 
+  <!-- Navegación inferior (hasta 768px de ancho, ver css/styles.css):
+       mismos botones que nav.tabs de arriba (misma clase tab-button +
+       data-tab, así que js/app.js los sincroniza sin código aparte) más
+       el acceso a Configuración, que en mobile se muda acá. -->
+  <nav class="bottom-nav" aria-label="Navegación">
+    <div class="bottom-nav-inner">
+      <button class="tab-button bottom-nav-item active" data-tab="diaria">
+        <span class="bottom-nav-icon">📝</span>
+        <span class="bottom-nav-label">Diaria</span>
+      </button>
+      <button class="tab-button bottom-nav-item" data-tab="semanal">
+        <span class="bottom-nav-icon">📅</span>
+        <span class="bottom-nav-label">Semanal</span>
+      </button>
+      <button class="tab-button bottom-nav-item" data-tab="mensual">
+        <span class="bottom-nav-icon">🗓️</span>
+        <span class="bottom-nav-label">Mensual</span>
+      </button>
+      <button class="tab-button bottom-nav-item" data-tab="comidas">
+        <span class="bottom-nav-icon">🍽️</span>
+        <span class="bottom-nav-label">Comidas</span>
+      </button>
+      <button class="tab-button bottom-nav-item" data-tab="anio">
+        <span class="bottom-nav-icon">🗂️</span>
+        <span class="bottom-nav-label">Año</span>
+      </button>
+      <button class="bottom-nav-item" id="settings-btn-mobile">
+        <span class="bottom-nav-icon">⚙️</span>
+        <span class="bottom-nav-label">Ajustes</span>
+      </button>
+    </div>
+  </nav>
+
+  <!-- Captura rápida (botón flotante "+", ver js/quickCapture.js): un
+       solo campo de texto, Enter o "Guardar" anota en la Bandeja de
+       entrada (ver js/state.js: addInboxItem), visible desde cualquier
+       pestaña. -->
+  <button id="quick-capture-fab" class="fab" title="Captura rápida" aria-label="Anotar un pendiente rápido">+</button>
+  <div id="quick-capture-overlay" class="quick-capture-overlay">
+    <div id="quick-capture-sheet" class="quick-capture-sheet">
+      <input id="quick-capture-input" type="text" class="add-input" placeholder="¿Qué necesitas anotar?" />
+      <div class="quick-capture-actions">
+        <button id="quick-capture-cancel" class="btn-secondary" type="button">Cancelar</button>
+        <button id="quick-capture-save" class="btn-primary" type="button">Guardar</button>
+      </div>
+    </div>
+  </div>
+  <div id="quick-capture-toast" class="quick-capture-toast" role="status">Anotado</div>
+
   <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
@@ -59,6 +108,7 @@
   <script src="js/mealsView.js"></script>
   <script src="js/yearView.js"></script>
   <script src="js/app.js"></script>
+  <script src="js/quickCapture.js"></script>
   <script src="js/firebaseSync.js"></script>
   <script src="js/userConfigSync.js"></script>
   <script>
@@ -89,6 +139,31 @@
       document.getElementById("settings-btn").addEventListener("click", () => {
         window.Agenda.userConfigSync.openSettings();
       });
+      // Mismo botón de Configuración, pero el de la barra inferior
+      // (solo visible hasta 768px, ver css/styles.css).
+      const settingsBtnMobile = document.getElementById("settings-btn-mobile");
+      if (settingsBtnMobile) {
+        settingsBtnMobile.addEventListener("click", () => {
+          window.Agenda.userConfigSync.openSettings();
+        });
+      }
+    })();
+  </script>
+
+  <script>
+    // Mobile: cuando el teclado en pantalla se abre, el visual viewport
+    // (lo que de verdad se ve, sin contar lo tapado por el teclado) se
+    // achica bastante respecto al viewport completo — ahí se oculta la
+    // barra inferior y el botón "+" para que no tapen el campo que se
+    // está escribiendo ni queden flotando a mitad de pantalla (ver
+    // body.keyboard-open en css/styles.css).
+    (function () {
+      if (!window.visualViewport) return;
+      function handleViewportResize() {
+        const shrunk = window.visualViewport.height < window.innerHeight * 0.75;
+        document.body.classList.toggle("keyboard-open", shrunk);
+      }
+      window.visualViewport.addEventListener("resize", handleViewportResize);
     })();
   </script>
 

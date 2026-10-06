@@ -16,7 +16,7 @@
  * abajo, así que un cambio de contenido común (editar un .js) NO
  * requiere tocar esta versión.
  */
-const CACHE_NAME = "agenda-personal-v2";
+const CACHE_NAME = "agenda-personal-v3";
 
 const PRECACHE_URLS = [
   "./",
@@ -42,6 +42,7 @@ const PRECACHE_URLS = [
   "./js/mealsView.js",
   "./js/yearView.js",
   "./js/app.js",
+  "./js/quickCapture.js",
   "./js/firebaseSync.js",
   "./js/userConfigSync.js",
   "./icons/icon-192.png",
