@@ -295,6 +295,26 @@ h2, h3, h4 {
   filter: brightness(1.15);
 }
 
+/* Mismo tamaño que .btn-primary/.btn-secondary, pero en contorno: señal
+   visual de que un botón cambió de función (ver "Deshacer réplica" en
+   la vista Semanal), no una acción distinta por estilo. */
+.btn-outline {
+  background: transparent;
+  border: 1px solid var(--accent-green);
+  color: var(--accent-green);
+  border-radius: 8px;
+  padding: 0.5rem 0.9rem;
+  cursor: pointer;
+  font-family: var(--font-sans);
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.btn-outline:hover {
+  background: var(--accent-green);
+  color: var(--bg);
+}
+
 .date-picker {
   font-family: var(--font-sans);
   padding: 0.45rem 0.6rem;

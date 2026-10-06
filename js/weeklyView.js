@@ -124,23 +124,14 @@ window.Agenda = window.Agenda || {};
         class: "btn-secondary",
         onclick: () => { currentMonday = dateUtils.getMonday(new Date()); addingMealDate = null; movingPendienteId = null; render(container); },
       }, "Esta semana"),
-      el("button", {
-        class: "btn-primary",
-        onclick: () => {
-          const infoConfirmed = confirm(
-            "Se copiarán solo los bloques flexibles. Gimnasio, corrida, meta, pendientes, hábitos y revisión del viernes no se copian."
-          );
-          if (!infoConfirmed) return;
-          if (state.weekHasAnyBlockText(mondayStr)) {
-            const overwriteConfirmed = confirm("Esto va a reemplazar lo que ya tienes capturado en esta semana, ¿continuar?");
-            if (!overwriteConfirmed) return;
-          }
-          state.replicatePreviousWeek(mondayStr);
-        },
-      }, "Replicar semana anterior"),
+      // Un solo botón en esta posición: cambia de función según si la
+      // semana que se está viendo tiene un respaldo de réplica pendiente
+      // de deshacer (ver state.hasReplicateBackup), no dos botones
+      // separados. El estilo "contorno" en el estado "Deshacer réplica"
+      // es la única señal visual del cambio de función.
       state.hasReplicateBackup(mondayStr)
         ? el("button", {
-            class: "btn-secondary",
+            class: "btn-outline",
             onclick: () => {
               const confirmed = confirm(
                 "Se restaurarán los bloques flexibles de esta semana al estado previo a la réplica. Cualquier cambio que hayas hecho después de replicar en esos bloques se perderá."
@@ -149,7 +140,20 @@ window.Agenda = window.Agenda || {};
               state.undoReplicateWeek(mondayStr);
             },
           }, "Deshacer réplica")
-        : el("button", { class: "btn-secondary", disabled: "disabled" }, "Nada que deshacer")
+        : el("button", {
+            class: "btn-primary",
+            onclick: () => {
+              const infoConfirmed = confirm(
+                "Se copiarán solo los bloques flexibles. Gimnasio, corrida, meta, pendientes, hábitos y revisión del viernes no se copian."
+              );
+              if (!infoConfirmed) return;
+              if (state.weekHasAnyBlockText(mondayStr)) {
+                const overwriteConfirmed = confirm("Esto va a reemplazar lo que ya tienes capturado en esta semana, ¿continuar?");
+                if (!overwriteConfirmed) return;
+              }
+              state.replicatePreviousWeek(mondayStr);
+            },
+          }, "Replicar semana anterior")
     );
 
     // Contador + racha: siempre relativo a "hoy" (no a la semana que se
