@@ -548,14 +548,17 @@ window.Agenda = window.Agenda || {};
     return ns.trainingSchedule.getRaceCountdownInfo(toISO(new Date()));
   }
 
-  // "Hecho" de un día con corrida programada: entre semana usa la
-  // casilla simple del bloque (day.blocks.correr.done); el domingo de
-  // carrera larga usa el pendiente "Correr" del checklist de fin de
-  // semana (es un dato distinto porque vive en una lista aparte).
+  // "Hecho" de un día con corrida programada: entre semana, y ahora
+  // también el domingo de carrera larga (desde que tiene su propio
+  // bloque fijo unificado, ver buildWeekendRunBlock), usa la casilla
+  // simple del bloque (day.blocks.correr.done). Solo si ese domingo NO
+  // tiene corrida programada en el plan (fuera de RUN_SUNDAYS) se sigue
+  // leyendo el pendiente "Correr" del checklist de fin de semana, para
+  // no cambiar nada en esos días sin plan.
   function isRunDayDone(dateStr) {
     const day = data.days[dateStr];
     if (!day) return false;
-    if (getWeekdayKey(dateStr) === "sun") {
+    if (getWeekdayKey(dateStr) === "sun" && ns.trainingSchedule.getSundayRunText(dateStr) === undefined) {
       const item = (day.weekendChecklist || []).find(
         (i) => i.key === "correr" || (i.key === undefined && i.text === "Correr")
       );
@@ -705,6 +708,28 @@ window.Agenda = window.Agenda || {};
     });
   }
 
+  // La corrida larga del domingo pasó de marcarse "hecho" en el ítem
+  // "Correr" del checklist de fin de semana (day.weekendChecklist) a
+  // marcarse en day.blocks.correr.done, igual que entre semana (ver
+  // buildWeekendRunBlock e isRunDayDone). Traslada una sola vez cualquier
+  // "hecho" ya guardado de esa forma vieja, para no perder marcas ya
+  // hechas (p.ej. domingos ya corridos) ni afectar la racha/contador.
+  function migrateWeekendRunDoneToBlocks() {
+    if (data.weekendRunDoneMigrated) return;
+    data.weekendRunDoneMigrated = true;
+    Object.keys(data.days || {}).forEach((dateStr) => {
+      const day = data.days[dateStr];
+      if (!day || !day.weekendChecklist) return;
+      const item = day.weekendChecklist.find(
+        (i) => i.key === "correr" || (i.key === undefined && i.text === "Correr")
+      );
+      if (!item || !item.done) return;
+      if (!day.blocks) day.blocks = {};
+      if (!day.blocks.correr) day.blocks.correr = {};
+      day.blocks.correr.done = true;
+    });
+  }
+
   // Todas estas migraciones son idempotentes (cada una revisa su propia
   // bandera y no hace nada si ya corrió). Además de correr una vez al
   // cargar la app, se vuelven a correr cada vez que llega un estado
@@ -725,6 +750,7 @@ window.Agenda = window.Agenda || {};
     migrateGymQueueCorrection4();
     migratePrioritiesToWeekTrabajo();
     migrateWeekHabitsToDayHabits();
+    migrateWeekendRunDoneToBlocks();
   }
   runMigrations();
   persist();
@@ -964,6 +990,28 @@ window.Agenda = window.Agenda || {};
     return { ...weekdayGymDef, fixed: true, text: "Descanso", done: false, gymStatus: "rest" };
   }
 
+  // Corrida larga de fin de semana (sábado o domingo, según lo que
+  // traiga el plan): mismo tratamiento visual y de datos que la corrida
+  // entre semana (bloque fijo de solo lectura, casilla en
+  // day.blocks.correr.done vía isBlockDone/toggleBlockDone), pero con
+  // "Mañana" como franja en vez de un horario inventado (el plan no fija
+  // hora los fines de semana) y el texto tomado de
+  // trainingSchedule.getSundayRunText (la misma fuente que ya alimentaba
+  // el checklist de fin de semana). null si esta fecha no tiene corrida
+  // programada en el plan.
+  function buildWeekendRunBlock(dateStr) {
+    const runText = ns.trainingSchedule.getSundayRunText(dateStr);
+    if (runText === undefined) return null;
+    return {
+      id: "correr",
+      time: "Mañana",
+      label: "Correr",
+      fixed: true,
+      text: `Correr - ${runText}`,
+      done: isBlockDone(dateStr, "correr"),
+    };
+  }
+
   function getDayBlocks(dateStr) {
     const day = getDay(dateStr);
     const isWeekend = isWeekendDate(dateStr);
@@ -1000,6 +1048,11 @@ window.Agenda = window.Agenda || {};
     if (isWeekend && ns.dateUtils.isoWeekday(ns.dateUtils.fromISO(dateStr)) === 5) {
       const satGym = buildSaturdayGymBlock(dateStr);
       if (satGym) result = [satGym, ...result];
+    }
+
+    if (isWeekend) {
+      const weekendRun = buildWeekendRunBlock(dateStr);
+      if (weekendRun) result = [weekendRun, ...result];
     }
 
     // Excepción puntual de la cuenta dueña (ver
@@ -1071,10 +1124,14 @@ window.Agenda = window.Agenda || {};
     return copy;
   }
 
-  // El ítem "Correr" del checklist de fin de semana refleja, de solo
-  // lectura, la distancia programada de ese domingo (si la fecha cae
-  // dentro del rango de trainingSchedule.js). Es una transformación al
-  // vuelo, para no persistir el texto calculado en el propio dato.
+  // El ítem "Correr" del checklist de fin de semana YA NO se usa para
+  // mostrar la corrida programada: cuando la fecha cae dentro del plan
+  // (trainingSchedule.getSundayRunText), esa sesión ahora tiene su propio
+  // bloque fijo unificado en la línea de tiempo (ver buildWeekendRunBlock
+  // más arriba), igual que entre semana. Por eso se lo saca por completo
+  // de este checklist en esas fechas, para no duplicarla ni mostrarla
+  // nunca como texto libre. Fuera del plan (sábados, o domingos sin
+  // sesión programada) el ítem sigue intacto, exactamente como antes.
   //
   // El atraso de gimnasio del sábado YA NO vive acá: ahora es un bloque
   // propio en la línea de tiempo de la Diaria (ver buildSaturdayGymBlock
@@ -1082,11 +1139,10 @@ window.Agenda = window.Agenda || {};
   // semana, en vez de una fila más de este checklist.
   function getWeekendChecklist(dateStr) {
     const items = getDay(dateStr).weekendChecklist;
-    const sundayRun = ns.trainingSchedule.getSundayRunText(dateStr);
-    return items.map((item) => {
+    const hasPlannedRun = ns.trainingSchedule.getSundayRunText(dateStr) !== undefined;
+    return items.filter((item) => {
       const isCorrerItem = item.key === "correr" || (item.key === undefined && item.text === "Correr");
-      if (isCorrerItem && sundayRun !== undefined) return { ...item, text: sundayRun };
-      return item;
+      return !(isCorrerItem && hasPlannedRun);
     });
   }
 
