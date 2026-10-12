@@ -302,6 +302,9 @@ window.Agenda = window.Agenda || {};
           if (block.id === "correr") {
             if (block.text) {
               dayCard.appendChild(el("p", { class: "run-note" }, `🏃 ${block.time} — ${block.text}`));
+              if (block.runBadge) {
+                dayCard.appendChild(el("p", { class: "run-badge" }, ns.runQueue.BADGE_LABELS[block.runBadge]));
+              }
             }
             return;
           }

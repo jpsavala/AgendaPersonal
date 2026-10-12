@@ -387,6 +387,41 @@ h2, h3, h4 {
   font-weight: 600;
 }
 
+/* Etiqueta chica sobre una sesión de corrida que la cola+puntero ajustó
+   (repetida, retrocedida o comprimida por un parón, ver runQueue.js). */
+.run-badge {
+  display: inline-block;
+  margin: 0.3rem 0 0;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--accent-gold);
+}
+
+/* Aviso de "plan en riesgo" para el ensayo del 10K (ver PARTE C): mismo
+   tono cálido que .run-badge, pero como bloque completo con borde, para
+   que se note sin llegar a sentirse alarmante. */
+.run-risk-banner {
+  background: var(--surface);
+  border: 1px solid var(--accent-gold);
+  border-radius: 8px;
+  padding: 0.7rem 0.9rem;
+  margin-bottom: 1.25rem;
+  font-size: 0.85rem;
+}
+
+.run-risk-banner p {
+  margin: 0 0 0.4rem;
+}
+
+.run-risk-banner p:last-of-type {
+  margin-bottom: 0.6rem;
+}
+
+.run-risk-accepted {
+  font-weight: 600;
+  color: var(--accent-green);
+}
+
 .quote-box {
   background: var(--surface);
   border-left: 4px solid var(--accent-gold);

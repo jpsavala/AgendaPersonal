@@ -730,6 +730,24 @@ window.Agenda = window.Agenda || {};
     });
   }
 
+  // Siembra data.runQueue (una sola vez: si ya existe, no hace nada,
+  // para no pisar correcciones ya hechas con "Corregir" del nuevo
+  // sistema). El 7, 9 y 11 de octubre ya habían pasado antes de que
+  // existiera este motor de cola+puntero: se traducen de solo lectura
+  // desde day.blocks.correr.done (sin cambiar ese valor en absoluto, ver
+  // "NO TOQUES... ni fechas anteriores a hoy") para que el puntero
+  // arranque en el lugar correcto y las reglas de parón tengan el
+  // historial real desde el principio del plan, en vez de arrancar en
+  // blanco como si nada hubiera pasado todavía esa primera semana.
+  function migrateRunQueueSeed() {
+    if (data.runQueue) return;
+    data.runQueue = { resolutions: {} };
+    ["2026-10-07", "2026-10-09", "2026-10-11"].forEach((d) => {
+      if (isBlockDone(d, "correr")) ns.runQueue.markDoneAt(data.runQueue, d, d);
+      else ns.runQueue.markSkippedAt(data.runQueue, d, d);
+    });
+  }
+
   // Todas estas migraciones son idempotentes (cada una revisa su propia
   // bandera y no hace nada si ya corrió). Además de correr una vez al
   // cargar la app, se vuelven a correr cada vez que llega un estado
@@ -751,6 +769,7 @@ window.Agenda = window.Agenda || {};
     migratePrioritiesToWeekTrabajo();
     migrateWeekHabitsToDayHabits();
     migrateWeekendRunDoneToBlocks();
+    migrateRunQueueSeed();
   }
   runMigrations();
   persist();
@@ -990,26 +1009,106 @@ window.Agenda = window.Agenda || {};
     return { ...weekdayGymDef, fixed: true, text: "Descanso", done: false, gymStatus: "rest" };
   }
 
+  // Fechas fijas e inamovibles del plan (ver js/runQueue.js): el ensayo y
+  // la carrera nunca se mueven ni se recalculan por la cola, pero si el
+  // plan quedó "en riesgo" para el ensayo (ver getRunRisk) y la persona
+  // acepta el ajuste propuesto (ver setRunRiskAccepted), estas dos
+  // fechas cambian su texto por la meta reducida — de forma pegajosa:
+  // una vez aceptada, el texto ajustado queda aunque después se alcance
+  // el ritmo original, para no ir cambiando la meta de un lado a otro.
+  const RUN_RISK_ENSAYO_DATE = "2026-11-15";
+  const RUN_RISK_CARRERA_DATE = "2026-11-29";
+  const RUN_RISK_ENSAYO_TEXT = "Correr - 10km (9 min corriendo / 1 min caminando)";
+  const RUN_RISK_CARRERA_TEXT = "Carrera - 10km (9 min corriendo / 1 min caminando)";
+
   // Corrida larga de fin de semana (sábado o domingo, según lo que
-  // traiga el plan): mismo tratamiento visual y de datos que la corrida
-  // entre semana (bloque fijo de solo lectura, casilla en
-  // day.blocks.correr.done vía isBlockDone/toggleBlockDone), pero con
-  // "Mañana" como franja en vez de un horario inventado (el plan no fija
-  // hora los fines de semana) y el texto tomado de
-  // trainingSchedule.getSundayRunText (la misma fuente que ya alimentaba
-  // el checklist de fin de semana). null si esta fecha no tiene corrida
-  // programada en el plan.
+  // traiga el plan). Dos fuentes, según la fecha:
+  // - Dentro del tramo deslizante (ver runQueue.isManagedDate): la cola
+  //   con puntero, igual que entre semana (ver getDayBlocks).
+  // - Fuera de ese tramo (fijo: ensayo, semanas ancladas y carrera):
+  //   sigue viniendo de trainingSchedule.getSundayRunText como antes, de
+  //   solo lectura con la casilla simple de siempre
+  //   (day.blocks.correr.done). La carrera usa "Carrera - " en vez de
+  //   "Correr - " (formato del plan, ver PARTE D), y tanto ella como el
+  //   ensayo pueden mostrar la meta ajustada si se aceptó el aviso de
+  //   riesgo.
+  // Mismo tratamiento visual en los dos casos: "Mañana" como franja en
+  // vez de un horario inventado (el plan no fija hora los fines de
+  // semana). null si esta fecha no tiene corrida programada en el plan.
   function buildWeekendRunBlock(dateStr) {
+    if (ns.runQueue.isManagedDate(dateStr)) {
+      const r = getRunResolution(dateStr);
+      if (!r) return null;
+      return {
+        id: "correr",
+        time: "Mañana",
+        label: "Correr",
+        fixed: true,
+        text: r.session.text,
+        done: r.status === "done",
+        runStatus: r.status,
+        runBadge: r.badge,
+      };
+    }
+
+    if (dateStr === RUN_RISK_CARRERA_DATE) {
+      const text = isRunRiskAccepted() ? RUN_RISK_CARRERA_TEXT : "Carrera - 10km";
+      return { id: "correr", time: "Mañana", label: "Correr", fixed: true, text, done: isBlockDone(dateStr, "correr") };
+    }
+
     const runText = ns.trainingSchedule.getSundayRunText(dateStr);
     if (runText === undefined) return null;
-    return {
-      id: "correr",
-      time: "Mañana",
-      label: "Correr",
-      fixed: true,
-      text: `Correr - ${runText}`,
-      done: isBlockDone(dateStr, "correr"),
-    };
+    const text =
+      dateStr === RUN_RISK_ENSAYO_DATE && isRunRiskAccepted() ? RUN_RISK_ENSAYO_TEXT : `Correr - ${runText}`;
+    return { id: "correr", time: "Mañana", label: "Correr", fixed: true, text, done: isBlockDone(dateStr, "correr") };
+  }
+
+  // ---------- Corrida: cola con puntero (ver js/runQueue.js) ----------
+  function getRunResolution(dateStr) {
+    if (!data.runQueue || !ns.runQueue.isManagedDate(dateStr)) return null;
+    const todayStr = toISO(new Date());
+    return ns.runQueue.resolve(data.runQueue, dateStr, todayStr);
+  }
+
+  function markRunDone(dateStr) {
+    if (!data.runQueue) return;
+    const todayStr = toISO(new Date());
+    if (ns.runQueue.markDoneAt(data.runQueue, dateStr, todayStr)) notify();
+  }
+
+  function markRunSkipped(dateStr) {
+    if (!data.runQueue) return;
+    const todayStr = toISO(new Date());
+    if (ns.runQueue.markSkippedAt(data.runQueue, dateStr, todayStr)) notify();
+  }
+
+  // Corrige una respuesta de corrida ya guardada (igual que editGymDay):
+  // si el cambio choca con una fecha posterior ya confirmada, no cambia
+  // nada y devuelve el conflicto para que la UI lo muestre.
+  function editRunDay(dateStr, done) {
+    if (!data.runQueue) return { ok: false, reason: "not-resolved" };
+    const todayStr = toISO(new Date());
+    const result = ns.runQueue.editResolution(data.runQueue, dateStr, todayStr, done ? "done" : "skipped");
+    if (result.ok && result.changed) notify();
+    return result;
+  }
+
+  // true si, con el historial real hasta ahora, la reproyección no
+  // llega de forma segura al ensayo del 15 nov ni comprimiendo al tope
+  // permitido (ver PARTE C del pedido original / runQueue.js).
+  function getRunRisk() {
+    if (!data.runQueue) return false;
+    const todayStr = toISO(new Date());
+    return ns.runQueue.getProjection(data.runQueue, todayStr).risk;
+  }
+
+  function isRunRiskAccepted() {
+    return !!data.runRiskAccepted;
+  }
+
+  function setRunRiskAccepted(accepted) {
+    data.runRiskAccepted = !!accepted;
+    notify();
   }
 
   function getDayBlocks(dateStr) {
@@ -1030,6 +1129,20 @@ window.Agenda = window.Agenda || {};
         }
         // Sin datos (antes de que arrancara este sistema, o cola ya
         // agotada): sigue igual que antes, editable manual.
+      }
+
+      if (def.id === "correr" && ns.runQueue.isManagedDate(dateStr)) {
+        const r = getRunResolution(dateStr);
+        if (r) {
+          return {
+            ...def,
+            fixed: true,
+            text: r.session.text,
+            done: r.status === "done",
+            runStatus: r.status,
+            runBadge: r.badge,
+          };
+        }
       }
 
       const override = getAutoBlockOverride(def, dateStr);
@@ -1721,6 +1834,13 @@ window.Agenda = window.Agenda || {};
     getGymResolution,
     isGymUnavailable,
     setGymUnavailable,
+    getRunResolution,
+    markRunDone,
+    markRunSkipped,
+    editRunDay,
+    getRunRisk,
+    isRunRiskAccepted,
+    setRunRiskAccepted,
     getRaceCountdown,
     getRunStreak,
     getMotivationBanner,

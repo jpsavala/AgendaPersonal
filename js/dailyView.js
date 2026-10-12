@@ -226,6 +226,69 @@ window.Agenda = window.Agenda || {};
     return parts;
   }
 
+  // Fecha (o null) cuya respuesta de corrida se está corrigiendo en este
+  // momento — mismo mecanismo que editingGymDate, para el tramo con
+  // cola+puntero (ver buildRunExtras).
+  let editingRunDate = null;
+
+  function applyRunEdit(dateStr, done) {
+    const result = state.editRunDay(dateStr, done);
+    editingRunDate = null;
+    if (!result.ok && result.reason === "conflict") {
+      showRunConflictWarning(result.conflicts);
+    }
+    render(containerRef);
+  }
+
+  function showRunConflictWarning(conflicts) {
+    const lines = conflicts.map((c) => {
+      const dateLabel = dateUtils.formatLong(dateUtils.fromISO(c.date));
+      if (!c.newSession) {
+        return `• ${dateLabel}: con este cambio, ese día ya no correspondería correr (tenías guardado "${c.oldSession}").`;
+      }
+      return `• ${dateLabel}: tenías guardado "${c.oldSession}", pero con este cambio le tocaría "${c.newSession}".`;
+    });
+    const plural = conflicts.length > 1;
+    alert(
+      `No se pudo aplicar la corrección: choca con ${plural ? conflicts.length + " fechas posteriores" : "una fecha posterior"} que ya ${plural ? "tienen" : "tiene"} su propia respuesta guardada:\n\n${lines.join("\n")}\n\nCorregí esas fechas primero (de la misma forma) y volvé a intentar.`
+    );
+  }
+
+  function buildRunExtras(dateStr, block) {
+    if (!block.runStatus) return null;
+    if (block.runStatus === "done" || block.runStatus === "skipped") {
+      if (editingRunDate === dateStr) {
+        return el(
+          "div",
+          { class: "gym-actions" },
+          el("span", { class: "muted" }, "Corregir: ¿corriste ese día?"),
+          el("button", { class: "btn-secondary", onclick: () => applyRunEdit(dateStr, false) }, "No"),
+          el("button", { class: "btn-primary", onclick: () => applyRunEdit(dateStr, true) }, "Sí")
+        );
+      }
+      return el(
+        "div",
+        { class: "gym-actions" },
+        el("span", { class: "muted" }, block.runStatus === "done" ? "✓ Hecho" : "No realizada"),
+        el(
+          "button",
+          { class: "link-btn", onclick: () => { editingRunDate = dateStr; render(containerRef); } },
+          "Corregir"
+        )
+      );
+    }
+    if (block.runStatus === "pending") {
+      return el(
+        "div",
+        { class: "gym-actions" },
+        el("span", { class: "muted" }, "¿Corriste hoy?"),
+        el("button", { class: "btn-secondary", onclick: () => state.markRunSkipped(dateStr) }, "No"),
+        el("button", { class: "btn-primary", onclick: () => state.markRunDone(dateStr) }, "Sí")
+      );
+    }
+    return null; // "projected": todavía no llega, sin acción posible
+  }
+
   function buildMealSelector(dateStr, currentText) {
     if (addingMeal) {
       const input = el("input", { type: "text", class: "add-input", placeholder: "Nombre de la comida nueva..." });
@@ -301,6 +364,7 @@ window.Agenda = window.Agenda || {};
           currentDate = dateUtils.fromISO(e.target.value);
           addingMeal = false;
           editingGymDate = null;
+          editingRunDate = null;
           manuallyExpandedBlockIds = new Set();
           renderWithTransition(container);
         },
@@ -312,6 +376,7 @@ window.Agenda = window.Agenda || {};
           currentDate = new Date();
           addingMeal = false;
           editingGymDate = null;
+          editingRunDate = null;
           manuallyExpandedBlockIds = new Set();
           renderWithTransition(container);
         },
@@ -405,9 +470,17 @@ window.Agenda = window.Agenda || {};
       // este bloque (ni la etiqueta ni una fila vacía). Ya es una sola
       // línea compacta de por sí, así que no se colapsa más — solo se
       // resalta si es el bloque en curso.
+      //
+      // Dentro del tramo con cola+puntero (block.runStatus presente, ver
+      // state.getRunResolution), usa el mismo control "pendiente/hecho/
+      // perdida + Corregir" que el gimnasio en vez de la casilla simple
+      // de siempre (ver buildRunExtras) — fuera de ese tramo (fechas
+      // fijas: ensayo, semanas ancladas, carrera, o fuera del plan por
+      // completo) sigue con la casilla simple de toda la vida.
       if (block.id === "correr" && block.fixed) {
         if (!block.text) return;
         const isHighlighted = isToday && highlightId === block.id;
+        const badgeLabel = block.runBadge ? ns.runQueue.BADGE_LABELS[block.runBadge] : null;
         const wrapper = el(
           "div",
           { class: "schedule-block run-block" + (isHighlighted ? " current" : "") },
@@ -416,13 +489,17 @@ window.Agenda = window.Agenda || {};
             { class: "schedule-block-head" },
             block.time ? el("span", { class: "schedule-time" }, block.time) : null,
             el("span", { class: "schedule-label" }, `🏃 ${block.text}`),
-            el("input", {
-              type: "checkbox",
-              class: "schedule-check",
-              checked: block.done ? "checked" : null,
-              onchange: () => state.toggleBlockDone(dateStr, block.id),
-            })
-          )
+            block.runStatus
+              ? null
+              : el("input", {
+                  type: "checkbox",
+                  class: "schedule-check",
+                  checked: block.done ? "checked" : null,
+                  onchange: () => state.toggleBlockDone(dateStr, block.id),
+                })
+          ),
+          badgeLabel ? el("span", { class: "run-badge" }, badgeLabel) : null,
+          block.runStatus ? el("div", { class: "schedule-block-body" }, buildRunExtras(dateStr, block)) : null
         );
         blockElementsById[block.id] = wrapper;
         timeline.appendChild(wrapper);
@@ -672,9 +749,51 @@ window.Agenda = window.Agenda || {};
         )
       : null;
 
+    // Aviso de plan en riesgo (ver state.getRunRisk / PARTE C): solo para
+    // la cuenta con el plan de corrida por cola+puntero. Una vez
+    // aceptado el ajuste, se cambia el aviso por una nota más chica en
+    // vez de desaparecer del todo, para que quede claro que la meta del
+    // ensayo/carrera ya quedó ajustada.
+    const riskBanner = state.getRunRisk()
+      ? state.isRunRiskAccepted()
+        ? el(
+            "div",
+            { class: "run-risk-banner run-risk-accepted" },
+            "✓ Meta del ensayo ajustada: completar los 10 km corriendo 9 min / caminando 1."
+          )
+        : el(
+            "div",
+            { class: "run-risk-banner" },
+            el("p", null, "⚠️ Plan en riesgo para el ensayo del 15 nov."),
+            el(
+              "p",
+              { class: "muted" },
+              "Con las ranuras que quedan, no se llega de forma segura a los 10 km ni comprimiendo al tope."
+            ),
+            el(
+              "button",
+              {
+                class: "btn-secondary",
+                onclick: () => {
+                  if (
+                    confirm(
+                      '¿Ajustar la meta del ensayo (15 nov) y la carrera (29 nov) a "completar los 10 km corriendo 9 min / caminando 1" en vez del ritmo original?'
+                    )
+                  ) {
+                    state.setRunRiskAccepted(true);
+                    render(containerRef);
+                  }
+                },
+              },
+              "Ajustar meta a correr/caminar"
+            )
+          )
+      : null;
+
     const sections = [header, subtitle, eventsBanner, quoteBox, wordBox];
     if (!isWeekend) sections.push(cookToggle);
     sections.push(runBanner);
+    sections.push(riskBanner);
     sections.push(timeline);
     if (isWeekend) sections.push(weekendSection);
     sections.push(grid);
@@ -781,6 +900,7 @@ window.Agenda = window.Agenda || {};
     currentDate = dateUtils.addDays(currentDate, delta);
     addingMeal = false;
     editingGymDate = null;
+    editingRunDate = null;
     manuallyExpandedBlockIds = new Set();
     if (containerRef) renderWithTransition(containerRef);
   }
