@@ -116,6 +116,56 @@ header.app-header {
   text-align: center;
 }
 
+/* Botón "Reintentar" cuando la sincronización con el servidor no se
+   resuelve a tiempo (ver index.html, PARTE 2.5): mismo tono de aviso
+   que .run-risk-banner, fijo abajo para no desplazar el contenido. */
+.connection-retry-banner {
+  position: fixed;
+  left: 50%;
+  bottom: 5.5rem;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.6rem;
+  background: var(--surface);
+  border: 1px solid var(--accent-gold);
+  color: var(--text-primary);
+  border-radius: 10px;
+  padding: 0.6rem 0.9rem;
+  font-size: 0.82rem;
+  font-family: var(--font-sans);
+  z-index: 100;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.18);
+  width: min(92vw, 420px);
+}
+
+.connection-retry-banner span {
+  flex: 1 1 200px;
+  min-width: 0;
+}
+
+.connection-retry-banner button {
+  flex: 0 0 auto;
+}
+
+/* Aviso de que esta agenda se mudó de alojamiento (ver index.html,
+   PARTE 1.6): solo aparece en GitHub Pages, franja fija arriba de todo. */
+.hosting-moved-banner {
+  background: var(--accent-gold);
+  color: var(--text-primary);
+  text-align: center;
+  font-size: 0.82rem;
+  font-family: var(--font-sans);
+  padding: 0.45rem 0.8rem;
+}
+
+.hosting-moved-banner a {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
 .palette-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));

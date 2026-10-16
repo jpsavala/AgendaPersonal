@@ -86,9 +86,7 @@
   </div>
   <div id="quick-capture-toast" class="quick-capture-toast" role="status">Anotado</div>
 
-  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
+  <script src="js/vendor/firebase-compat.js"></script>
   <script src="js/quotes.js"></script>
   <script src="js/wordOfTheDay.js"></script>
   <script src="js/wordLanguage.js"></script>
@@ -115,11 +113,16 @@
   <script>
     (function () {
       const el = document.getElementById("sync-status");
+      // "error" cubre varias causas (SDK que no cargó, red caída, la
+      // primera lectura a Firestore que no respondió, etc.): en TODAS,
+      // la agenda sigue funcionando con los datos locales y editable sin
+      // problema, así que el mensaje lo deja claro en vez de sonar a que
+      // algo se rompió.
       const labels = {
         connecting: "Conectando…",
         syncing: "Sincronizando…",
         synced: "Sincronizado",
-        error: "Sin conexión con el servidor",
+        error: "Sin conexión, datos locales",
         "signed-out": "Iniciar sesión para sincronizar",
       };
       function render(status) {
@@ -148,6 +151,62 @@
           window.Agenda.userConfigSync.openSettings();
         });
       }
+
+      // Si a los 5 s de abrir la app la sincronización sigue sin
+      // resolverse ("connecting" nunca llegó a "synced"/"signed-out"/
+      // "error"), o si directamente falló, ofrece un botón para
+      // reintentar en vez de dejar solo el indicador chico de arriba —
+      // la agenda en sí ya se ve y se puede usar con los datos locales
+      // desde el primer instante (ver js/app.js, no espera a esto), así
+      // que esto es solo sobre la conexión con el servidor, nunca una
+      // pantalla de carga que tape la app.
+      let retryBannerShown = false;
+      function showRetryBanner() {
+        if (retryBannerShown || document.getElementById("connection-retry-banner")) return;
+        retryBannerShown = true;
+        const banner = document.createElement("div");
+        banner.id = "connection-retry-banner";
+        banner.className = "connection-retry-banner";
+        banner.innerHTML =
+          '<span>No se pudo conectar con el servidor. Tus datos locales están disponibles igual.</span>';
+        const btn = document.createElement("button");
+        btn.className = "btn-secondary";
+        btn.textContent = "Reintentar";
+        btn.addEventListener("click", () => window.location.reload());
+        banner.appendChild(btn);
+        document.body.appendChild(banner);
+      }
+      function hideRetryBanner() {
+        retryBannerShown = false;
+        const banner = document.getElementById("connection-retry-banner");
+        if (banner && banner.parentNode) banner.parentNode.removeChild(banner);
+      }
+      sync.onStatusChange((status) => {
+        if (status === "synced" || status === "signed-out") hideRetryBanner();
+        else if (status === "error") showRetryBanner();
+      });
+      setTimeout(() => {
+        const status = sync.getStatus();
+        if (status === "connecting" || status === "error") showRetryBanner();
+      }, 5000);
+    })();
+  </script>
+
+  <script>
+    // Aviso de que esta agenda se mudó de alojamiento (ver PARTE 1):
+    // solo se muestra cuando se abre desde GitHub Pages, nunca en el
+    // dominio nuevo de Firebase Hosting ni en desarrollo local. Los
+    // datos viven en Firestore por cuenta, no en este dominio, así que
+    // es solo un aviso — no hace falta "migrar" nada manualmente, basta
+    // con iniciar sesión con la misma cuenta en la URL nueva.
+    (function () {
+      const NEW_URL = "https://agendapersonal-13aef.web.app/";
+      if (!/\.github\.io$/i.test(location.hostname)) return;
+      const banner = document.createElement("div");
+      banner.className = "hosting-moved-banner";
+      banner.innerHTML =
+        'Esta agenda se mudó a <a href="' + NEW_URL + '">' + NEW_URL + "</a>";
+      document.body.insertBefore(banner, document.body.firstChild);
     })();
   </script>
 

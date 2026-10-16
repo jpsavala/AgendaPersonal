@@ -1,0 +1,27 @@
+name: Deploy a Firebase Hosting
+
+# Cada push a main despliega el sitio tal cual (sin build: no hay paso
+# de compilación, es HTML/CSS/JS plano) a Firebase Hosting del proyecto
+# agendapersonal-13aef, además de lo que ya pase con GitHub Pages (esto
+# no toca esa configuración, son dos despliegues independientes del
+# mismo contenido).
+#
+# Requiere el secreto FIREBASE_TOKEN en este repositorio (Settings →
+# Secrets and variables → Actions → New repository secret), generado
+# una vez con `firebase login:ci` desde la computadora de quien
+# administra el proyecto. Ver el mensaje del chat para los pasos
+# exactos — no se puede generar este token desde acá.
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Deploy to Firebase Hosting
+        run: npx firebase-tools deploy --only hosting --token "$FIREBASE_TOKEN" --non-interactive
+        env:
+          FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}

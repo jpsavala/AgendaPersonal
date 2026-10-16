@@ -1,0 +1,28 @@
+{
+  "hosting": {
+    "public": ".",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**",
+      "tests/**",
+      ".github/**"
+    ],
+    "cleanUrls": true,
+    "trailingSlash": false,
+    "headers": [
+      {
+        "source": "/service-worker.js",
+        "headers": [{ "key": "Cache-Control", "value": "no-cache" }]
+      },
+      {
+        "source": "/manifest.json",
+        "headers": [{ "key": "Cache-Control", "value": "no-cache" }]
+      },
+      {
+        "source": "/icons/**",
+        "headers": [{ "key": "Cache-Control", "value": "public, max-age=604800" }]
+      }
+    ]
+  }
+}

@@ -315,6 +315,17 @@ window.Agenda = window.Agenda || {};
     }
     firebase.initializeApp(firebaseConfig);
     db = firebase.firestore();
+    // Antes de CUALQUIER otro uso de `db` (la API lo exige): en redes
+    // móviles con problemas de ruta (proxies, firewalls que cortan
+    // streaming/WebSockets), el canal normal de Firestore puede
+    // quedarse colgado sin avisar. "auto detect" prueba primero el canal
+    // normal y cae solo a long-polling si hace falta, sin tener que
+    // adivinar de antemano qué red va a tener el problema.
+    try {
+      db.settings({ experimentalAutoDetectLongPolling: true });
+    } catch (e) {
+      /* Ya se habían usado settings antes (recarga en caliente del módulo, no debería pasar en uso normal): no es crítico. */
+    }
     try {
       db.enablePersistence().catch(() => {
         /* Varias pestañas abiertas u otra causa: sigue funcionando, solo sin caché offline. */
