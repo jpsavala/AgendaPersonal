@@ -12,6 +12,13 @@ window.Agenda = window.Agenda || {};
   // criterio transitorio que addingMealDate, se limpia sola al elegir
   // una comida, al tocar "Cambiar" o al redibujar por cualquier otro motivo.
   let comidaRepeatWarningFor = null;
+  // Última fecha (dateStr) de captura de paradas ya atendida: evita que
+  // cada render vuelva a saltar a su semana si el usuario navegó a otra
+  // semana a mano mientras la captura seguía activa (ver render(), y
+  // js/app.js: startParadaCapture/getParadaCaptureSession). Se resetea
+  // sola en cuanto la sesión de captura termina, para que una próxima
+  // reactivación (incluso para la misma fecha) vuelva a saltar.
+  let lastHandledCaptureDateStr = null;
   // Bandeja de entrada (captura rápida, ver js/quickCapture.js): arranca
   // cerrada cada vez que se carga la página (como addingMealDate/
   // movingPendienteId, estado puramente de esta sesión); "categoría"
@@ -279,8 +286,34 @@ window.Agenda = window.Agenda || {};
     return wrap;
   }
 
+  // "Paradas del lunes 19: escribe cada una y agrégala" (ver nota de
+  // captura en render()/pendientesCard).
+  function formatCaptureDayLabel(dateStr) {
+    const date = dateUtils.fromISO(dateStr);
+    return `${dateUtils.DAY_LABELS_LONG[dateUtils.isoWeekday(date)].toLowerCase()} ${date.getDate()}`;
+  }
+
   function render(container) {
+    // Captura de paradas (ver js/app.js: startParadaCapture): si hay una
+    // sesión activa y todavía no se saltó a su semana, se salta UNA
+    // sola vez (lastHandledCaptureDateStr) — así el usuario queda libre
+    // de navegar a otra semana con ◀/▶ sin que cada redibujado lo
+    // regrese a la fuerza. captureActiveForThisWeek sí se recalcula en
+    // cada render: controla la nota, el resaltado inicial, y que el
+    // campo de agregar de "Trabajo" guarde paradas en vez de pendientes
+    // de oficina, mientras la semana mostrada sea la de la captura.
+    const captureSession = ns.app.getParadaCaptureSession ? ns.app.getParadaCaptureSession() : null;
+    let justEnteredCapture = false;
+    if (captureSession && captureSession.dateStr !== lastHandledCaptureDateStr) {
+      currentMonday = dateUtils.fromISO(captureSession.mondayStr);
+      lastHandledCaptureDateStr = captureSession.dateStr;
+      justEnteredCapture = true;
+    } else if (!captureSession) {
+      lastHandledCaptureDateStr = null;
+    }
+
     const mondayStr = dateUtils.toISO(currentMonday);
+    const captureActiveForThisWeek = !!(captureSession && captureSession.mondayStr === mondayStr);
     const week = state.getWeek(mondayStr);
     const days = dateUtils.getWeekDates(currentMonday);
 
@@ -423,7 +456,13 @@ window.Agenda = window.Agenda || {};
                   ),
                   el(
                     "button",
-                    { class: "btn-primary", onclick: () => state.setPrevioOficinaAnswer(dateStrForDay, "si") },
+                    {
+                      class: "btn-primary",
+                      onclick: () => {
+                        state.setPrevioOficinaAnswer(dateStrForDay, "si");
+                        ns.app.startParadaCapture(dateStrForDay);
+                      },
+                    },
                     "Sí"
                   )
                 )
@@ -620,7 +659,28 @@ window.Agenda = window.Agenda || {};
     const inboxSection = buildInboxSection(container, mondayStr, officeBlockOptions);
     if (inboxSection) pendientesCard.appendChild(inboxSection);
 
-    pendientesCard.appendChild(el("h4", { class: "pendientes-subtitle" }, "Trabajo"));
+    // "Trabajo": pendientesTrabajo de siempre + las paradas de esta
+    // semana (ver state.getWeekParadas), etiquetadas "Parada" y con su
+    // día para no confundirlas con pendientes de oficina reales (misma
+    // casilla que el bloque de las 09:00, ver state.toggleParada: es el
+    // mismo dato, se sincronizan solos). Mientras el modo de captura
+    // (ver arriba, captureActiveForThisWeek) esté activo para esta
+    // semana, la sección se resalta al entrar, muestra una nota, y el
+    // campo de agregar guarda paradas en vez de pendientes de oficina
+    // (sin selector de día/bloque: la parada ya tiene su fecha fija, la
+    // de la sesión de captura).
+    const trabajoSection = el(
+      "div",
+      { class: "trabajo-section" + (justEnteredCapture ? " parada-capture-highlight" : "") },
+      el("h4", { class: "pendientes-subtitle" }, "Trabajo"),
+      captureActiveForThisWeek
+        ? el(
+            "p",
+            { class: "parada-capture-note" },
+            `Paradas del ${formatCaptureDayLabel(captureSession.dateStr)}: escribe cada una y agrégala`
+          )
+        : null
+    );
     const trabajoList = el("div", { class: "check-list" });
     state.getWeekTrabajoPendientes(mondayStr).forEach((item) => {
       const dayCheckboxes = buildDayCheckboxGroup(item.dayKeys, (dk) =>
@@ -651,22 +711,48 @@ window.Agenda = window.Agenda || {};
         )
       );
     });
-    pendientesCard.appendChild(trabajoList);
+    state.getWeekParadas(mondayStr).forEach((item) => {
+      const dayIdx = dateUtils.DAY_KEYS.indexOf(item.dayKeys[0]);
+      trabajoList.appendChild(
+        el(
+          "div",
+          { class: "check-row trabajo-row parada-row" + (item.done ? " done" : "") },
+          el("input", {
+            type: "checkbox",
+            checked: item.done ? "checked" : null,
+            onchange: () => state.toggleParadaInWeek(mondayStr, item.id),
+          }),
+          el("span", null, item.text),
+          el("span", { class: "parada-tag" }, "Parada"),
+          dayIdx === -1 ? null : el("span", { class: "parada-day-tag" }, dateUtils.DAY_LABELS_SHORT[dayIdx])
+        )
+      );
+    });
+    trabajoSection.appendChild(trabajoList);
 
-    const newTrabajoInput = el("input", { type: "text", class: "add-input", placeholder: "Nuevo pendiente de trabajo..." });
-    const newTrabajoDayCheckboxes = buildDayCheckboxGroup([]);
-    const newTrabajoBlockSelect = buildBlockSelect(officeBlockOptions, officeBlockOptions[0] && officeBlockOptions[0].value);
+    const newTrabajoInput = el("input", {
+      type: "text",
+      class: "add-input",
+      placeholder: captureActiveForThisWeek ? "Nueva parada..." : "Nuevo pendiente de trabajo...",
+    });
+    const newTrabajoDayCheckboxes = captureActiveForThisWeek ? null : buildDayCheckboxGroup([]);
+    const newTrabajoBlockSelect = captureActiveForThisWeek
+      ? null
+      : buildBlockSelect(officeBlockOptions, officeBlockOptions[0] && officeBlockOptions[0].value);
     const commitTrabajo = () => {
-      if (newTrabajoInput.value.trim()) {
+      if (!newTrabajoInput.value.trim()) return;
+      if (captureActiveForThisWeek) {
+        state.addParada(captureSession.dateStr, newTrabajoInput.value);
+      } else {
         const selectedDays = Array.from(newTrabajoDayCheckboxes.querySelectorAll("input:checked")).map((cb) => cb.value);
         state.addWeekTrabajoPendiente(mondayStr, newTrabajoInput.value, selectedDays, newTrabajoBlockSelect.value);
-        newTrabajoInput.value = "";
-        newTrabajoDayCheckboxes.querySelectorAll("input").forEach((cb) => { cb.checked = false; });
-        newTrabajoBlockSelect.value = (officeBlockOptions[0] && officeBlockOptions[0].value) || "";
       }
+      newTrabajoInput.value = "";
+      if (newTrabajoDayCheckboxes) newTrabajoDayCheckboxes.querySelectorAll("input").forEach((cb) => { cb.checked = false; });
+      if (newTrabajoBlockSelect) newTrabajoBlockSelect.value = (officeBlockOptions[0] && officeBlockOptions[0].value) || "";
     };
     newTrabajoInput.addEventListener("keydown", (e) => { if (e.key === "Enter") commitTrabajo(); });
-    pendientesCard.appendChild(
+    trabajoSection.appendChild(
       el(
         "div",
         { class: "add-row trabajo-add-row" },
@@ -680,10 +766,15 @@ window.Agenda = window.Agenda || {};
           "div",
           { class: "add-row-actions" },
           newTrabajoBlockSelect,
-          el("button", { class: "btn-primary", onclick: commitTrabajo }, "+ Agregar pendiente")
+          el(
+            "button",
+            { class: "btn-primary", onclick: commitTrabajo },
+            captureActiveForThisWeek ? "+ Agregar parada" : "+ Agregar pendiente"
+          )
         )
       )
     );
+    pendientesCard.appendChild(trabajoSection);
 
     // "Vida personal": mismo criterio que "Trabajo" pero sin bloque de
     // oficina (no aplica). Por ahora solo llegan acá pendientes
@@ -725,6 +816,22 @@ window.Agenda = window.Agenda || {};
     container.append(
       ...[header, runBanner, daysGrid, metaCard, unfinishedCard, pendientesCard, habitsCard, revisionCard].filter(Boolean)
     );
+
+    // Scroll + foco al campo de agregar mientras la captura de paradas
+    // esté activa para esta semana: se repite en cada render (no solo
+    // al entrar) para que, después de agregar una parada y que la lista
+    // se redibuje, el foco quede listo para la siguiente — scrollIntoView
+    // no hace nada si ya está visible, así que repetirlo es inofensivo.
+    // requestAnimationFrame espera a que el DOM recién armado ya esté
+    // en el documento (container.append de arriba) antes de medir/enfocar.
+    if (captureActiveForThisWeek) {
+      requestAnimationFrame(() => {
+        const section = container.querySelector(".trabajo-section");
+        if (section) section.scrollIntoView({ behavior: "smooth", block: "center" });
+        const input = container.querySelector(".trabajo-add-row .add-input");
+        if (input) input.focus({ preventScroll: true });
+      });
+    }
   }
 
   function go(delta) {

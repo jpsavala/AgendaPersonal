@@ -1925,6 +1925,25 @@ window.Agenda = window.Agenda || {};
     notify();
   }
 
+  // Todas las paradas de la semana completa (cualquier día), para
+  // mostrarlas etiquetadas "Parada" dentro de "Pendientes de la semana:
+  // Trabajo" en la vista Semanal (ver js/weeklyView.js) — mismo dato que
+  // getParadas/toggleParada de acá arriba (por fecha puntual), expuesto
+  // por semana para no tener que traducir cada parada a una fecha.
+  // Marcar la casilla en cualquiera de los dos lugares (este o el
+  // bloque de las 09:00) cambia el mismo objeto, así que quedan
+  // sincronizados solos.
+  function getWeekParadas(mondayStr) {
+    return getWeek(mondayStr).paradasAntesOficina;
+  }
+
+  function toggleParadaInWeek(mondayStr, id) {
+    const week = getWeek(mondayStr);
+    const p = week.paradasAntesOficina.find((p) => p.id === id);
+    if (p) p.done = !p.done;
+    notify();
+  }
+
   // true si ese día quedó en "Sí" y tiene alguna parada sin marcar. Hoy
   // este proyecto no tiene ningún sistema de avisos/recordatorios (no
   // hay ningún "Notification" ni aviso programado en todo el código,
@@ -2141,6 +2160,8 @@ window.Agenda = window.Agenda || {};
     toggleParada,
     editParadaText,
     removeParada,
+    getWeekParadas,
+    toggleParadaInWeek,
     hasUnfinishedParadasToday,
     getUnfinishedPendientesFromPreviousWeek,
     movePendienteToWeek,

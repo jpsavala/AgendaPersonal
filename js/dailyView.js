@@ -276,7 +276,17 @@ window.Agenda = window.Agenda || {};
           "div",
           { class: "gym-actions" },
           el("button", { class: "btn-secondary", onclick: () => state.setPrevioOficinaAnswer(dateStr, "no") }, "No"),
-          el("button", { class: "btn-primary", onclick: () => state.setPrevioOficinaAnswer(dateStr, "si") }, "Sí")
+          el(
+            "button",
+            {
+              class: "btn-primary",
+              onclick: () => {
+                state.setPrevioOficinaAnswer(dateStr, "si");
+                ns.app.startParadaCapture(dateStr);
+              },
+            },
+            "Sí"
+          )
         )
       );
     }
