@@ -308,6 +308,54 @@ window.Agenda = window.Agenda || {};
             }
             return;
           }
+          // "¿Habrá paradas antes de la oficina?": con "No" no se
+          // muestra nada de este bloque en absoluto (la oficina de abajo
+          // ya viene con el horario corrido 09:00-14:00, ver más abajo).
+          // Mismas Sí/No y misma lista de paradas (casilla nomás, igual
+          // que los pendientes de oficina de acá abajo) que la Diaria;
+          // agregar/editar/quitar paradas una por una queda solo en la
+          // Diaria, igual que ya pasa con "Pendientes de la semana:
+          // Trabajo" (acá solo se tilda, la lista completa se administra
+          // aparte).
+          if (block.id === "previo_oficina") {
+            if (block.previoOficinaAnswer === "no") return;
+            dayCard.appendChild(el("p", { class: "schedule-fixed-note" }, blockTitle));
+            if (block.previoOficinaAnswer === "si") {
+              state.getParadas(dateStrForDay).forEach((item) => {
+                dayCard.appendChild(
+                  el(
+                    "label",
+                    { class: "check-row" + (item.done ? " done" : "") },
+                    el("input", {
+                      type: "checkbox",
+                      checked: item.done ? "checked" : null,
+                      onchange: () => state.toggleParada(dateStrForDay, item.id),
+                    }),
+                    el("span", null, item.text)
+                  )
+                );
+              });
+            } else {
+              dayCard.appendChild(el("p", { class: "muted previo-oficina-pregunta" }, "¿Habrá paradas antes de la oficina?"));
+              dayCard.appendChild(
+                el(
+                  "div",
+                  { class: "gym-actions" },
+                  el(
+                    "button",
+                    { class: "btn-secondary", onclick: () => state.setPrevioOficinaAnswer(dateStrForDay, "no") },
+                    "No"
+                  ),
+                  el(
+                    "button",
+                    { class: "btn-primary", onclick: () => state.setPrevioOficinaAnswer(dateStrForDay, "si") },
+                    "Sí"
+                  )
+                )
+              );
+            }
+            return;
+          }
           dayCard.appendChild(el("p", { class: "schedule-fixed-note" }, blockTitle));
           if (block.text) {
             dayCard.appendChild(el("p", { class: "schedule-readonly-text" }, block.text));
@@ -326,6 +374,15 @@ window.Agenda = window.Agenda || {};
               )
             );
           });
+          if (block.previoOficinaMerged) {
+            dayCard.appendChild(
+              el(
+                "button",
+                { class: "link-btn previo-oficina-change", onclick: () => state.clearPrevioOficinaAnswer(dateStrForDay) },
+                "Cambiar: habrá paradas"
+              )
+            );
+          }
           return;
         }
         dayCard.appendChild(el("label", { class: "field-label" }, blockTitle));

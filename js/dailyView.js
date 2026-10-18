@@ -5,6 +5,10 @@ window.Agenda = window.Agenda || {};
   const MEAL_BLOCK_ID = "preparar_comida";
   const ADD_NEW_MEAL_VALUE = "__add_new__";
   let addingMeal = false;
+  // Id de la parada que se está editando en este momento (su texto pasa
+  // a un campo editable con Guardar/Cancelar, ver buildParadasList) —
+  // misma idea que editingGymDate/editingRunDate más abajo.
+  let editingParadaId = null;
 
   // ---------- Diaria de hoy: bloque en curso, colapso de lo ya pasado ----------
   // Todo esto solo aplica al día de HOY (ver isToday en render()); en
@@ -137,6 +141,141 @@ window.Agenda = window.Agenda || {};
       );
     });
     return list;
+  }
+
+  // Lista de paradas del bloque "previo_oficina" cuando la respuesta es
+  // "Sí" (ver buildPrevioOficinaBlock): mismo estilo visual que
+  // buildOfficePendientesList de arriba (misma clase .office-
+  // pendientes-list/.check-row), pero con casilla + texto + editar +
+  // quitar, porque acá la lista se arma y edita desde este mismo bloque
+  // en vez de solo mostrarse de solo lectura.
+  function buildParadasList(dateStr) {
+    const items = state.getParadas(dateStr);
+    const list = el("div", { class: "office-pendientes-list" });
+    items.forEach((item) => {
+      if (editingParadaId === item.id) {
+        const input = el("input", { type: "text", class: "add-input", value: item.text });
+        const commit = () => {
+          if (input.value.trim()) state.editParadaText(dateStr, item.id, input.value);
+          editingParadaId = null;
+          render(containerRef);
+        };
+        const cancel = () => {
+          editingParadaId = null;
+          render(containerRef);
+        };
+        input.addEventListener("keydown", (e) => {
+          if (e.key === "Enter") commit();
+          if (e.key === "Escape") cancel();
+        });
+        list.appendChild(
+          el(
+            "div",
+            { class: "add-row paradas-row editing" },
+            input,
+            el(
+              "div",
+              { class: "add-row-actions" },
+              el("button", { class: "btn-primary", onclick: commit }, "Guardar"),
+              el("button", { class: "btn-secondary", onclick: cancel }, "Cancelar")
+            )
+          )
+        );
+        return;
+      }
+      list.appendChild(
+        el(
+          "div",
+          { class: "check-row paradas-row" + (item.done ? " done" : "") },
+          el("input", {
+            type: "checkbox",
+            checked: item.done ? "checked" : null,
+            onchange: () => state.toggleParada(dateStr, item.id),
+          }),
+          el("span", null, item.text),
+          el(
+            "button",
+            {
+              class: "btn-remove",
+              title: "Editar parada",
+              onclick: () => {
+                editingParadaId = item.id;
+                render(containerRef);
+              },
+            },
+            "✎"
+          ),
+          el(
+            "button",
+            { class: "btn-remove", title: "Quitar parada", onclick: () => state.removeParada(dateStr, item.id) },
+            "×"
+          )
+        )
+      );
+    });
+    return list;
+  }
+
+  // Bloque "previo_oficina" (09:00-10:00, lunes a viernes): reemplaza
+  // por completo el texto libre/casilla simple de siempre por la
+  // pregunta "¿Habrá paradas antes de la oficina?" (sin responder), la
+  // lista de paradas (respuesta "Sí") o nada en absoluto (respuesta
+  // "No": ver el bloque "oficina_manana" más abajo, que agrega el
+  // enlace para revertir). Devuelve el elemento ya armado; quien llama
+  // decide si lo agrega a la línea de tiempo (null = no mostrar nada).
+  function buildPrevioOficinaBlock(dateStr, block) {
+    if (block.previoOficinaAnswer === "no") return null;
+
+    const head = el(
+      "div",
+      { class: "schedule-block-head" },
+      block.time ? el("span", { class: "schedule-time" }, block.time) : null,
+      el("span", { class: "schedule-label" }, block.label)
+    );
+
+    let body;
+    if (block.previoOficinaAnswer === "si") {
+      const newParadaInput = el("input", { type: "text", class: "add-input", placeholder: "Nueva parada..." });
+      const commitParada = () => {
+        if (newParadaInput.value.trim()) {
+          state.addParada(dateStr, newParadaInput.value);
+          newParadaInput.value = "";
+        }
+      };
+      newParadaInput.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") commitParada();
+      });
+      body = el(
+        "div",
+        { class: "schedule-block-body" },
+        buildParadasList(dateStr),
+        el(
+          "div",
+          { class: "add-row" },
+          newParadaInput,
+          el("button", { class: "btn-primary", onclick: commitParada }, "Agregar")
+        ),
+        el(
+          "button",
+          { class: "link-btn previo-oficina-change", onclick: () => state.clearPrevioOficinaAnswer(dateStr) },
+          "Cambiar: no habrá paradas"
+        )
+      );
+    } else {
+      body = el(
+        "div",
+        { class: "schedule-block-body" },
+        el("p", null, "¿Habrá paradas antes de la oficina?"),
+        el(
+          "div",
+          { class: "gym-actions" },
+          el("button", { class: "btn-secondary", onclick: () => state.setPrevioOficinaAnswer(dateStr, "no") }, "No"),
+          el("button", { class: "btn-primary", onclick: () => state.setPrevioOficinaAnswer(dateStr, "si") }, "Sí")
+        )
+      );
+    }
+
+    return el("div", { class: "schedule-block highlight" }, head, body);
   }
 
   // Fecha (o null) cuya respuesta de gimnasio se está corrigiendo en
@@ -365,6 +504,7 @@ window.Agenda = window.Agenda || {};
           addingMeal = false;
           editingGymDate = null;
           editingRunDate = null;
+          editingParadaId = null;
           manuallyExpandedBlockIds = new Set();
           renderWithTransition(container);
         },
@@ -377,6 +517,7 @@ window.Agenda = window.Agenda || {};
           addingMeal = false;
           editingGymDate = null;
           editingRunDate = null;
+          editingParadaId = null;
           manuallyExpandedBlockIds = new Set();
           renderWithTransition(container);
         },
@@ -506,6 +647,18 @@ window.Agenda = window.Agenda || {};
         return;
       }
 
+      // "¿Habrá paradas antes de la oficina?" (ver buildPrevioOficinaBlock):
+      // sin casilla simple ni colapso automático, ya que no es un bloque
+      // de horario fijo de siempre — con "No" no se agrega nada a la
+      // línea de tiempo en absoluto.
+      if (block.id === "previo_oficina") {
+        const wrapper = buildPrevioOficinaBlock(dateStr, block);
+        if (!wrapper) return;
+        blockElementsById[block.id] = wrapper;
+        timeline.appendChild(wrapper);
+        return;
+      }
+
       const autoState = todayStateById[block.id]; // "past" | "current" | "future" | undefined
       const isCollapsible = isToday && autoState === "past";
       const isCollapsedNow = isCollapsible && !manuallyExpandedBlockIds.has(block.id);
@@ -565,7 +718,14 @@ window.Agenda = window.Agenda || {};
               oninput: (e) => state.setBlockText(dateStr, block.id, e.target.value),
             }),
         OFFICE_BLOCK_IDS.includes(block.id) ? buildOfficePendientesList(dateStr, block.id) : null,
-        block.id === "gimnasio" ? buildGymExtras(dateStr, block) : null
+        block.id === "gimnasio" ? buildGymExtras(dateStr, block) : null,
+        block.previoOficinaMerged
+          ? el(
+              "button",
+              { class: "link-btn previo-oficina-change", onclick: () => state.clearPrevioOficinaAnswer(dateStr) },
+              "Cambiar: habrá paradas"
+            )
+          : null
       );
 
       const wrapper = el(
@@ -901,6 +1061,7 @@ window.Agenda = window.Agenda || {};
     addingMeal = false;
     editingGymDate = null;
     editingRunDate = null;
+    editingParadaId = null;
     manuallyExpandedBlockIds = new Set();
     if (containerRef) renderWithTransition(containerRef);
   }

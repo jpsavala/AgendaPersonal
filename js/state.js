@@ -38,6 +38,14 @@ window.Agenda = window.Agenda || {};
     return ns.dateUtils.toISO(ns.dateUtils.getMonday(ns.dateUtils.fromISO(dateStr)));
   }
 
+  // Inversa de getWeekdayKey: la fecha exacta de ese día de la semana
+  // (lunes = ese mondayStr mismo) dentro de la semana que empieza en
+  // mondayStr.
+  function dateForWeekday(mondayStr, dayKey) {
+    const idx = ns.dateUtils.DAY_KEYS.indexOf(dayKey);
+    return toISO(ns.dateUtils.addDays(ns.dateUtils.fromISO(mondayStr), idx));
+  }
+
   // El texto de los bloques vive por SEMANA ESPECÍFICA (identificada por
   // el lunes de esa semana) + día de la semana. Cada semana nueva
   // arranca vacía: no hereda nada de otras semanas por default.
@@ -748,6 +756,37 @@ window.Agenda = window.Agenda || {};
     });
   }
 
+  // Migra, una sola vez, el texto libre que ya hubiera en el bloque
+  // "previo_oficina" (de cualquier semana ya guardada, lunes a viernes)
+  // al modelo nuevo de Sí/No + lista de paradas: cada fecha con texto
+  // ahí pasa a "Sí", con ese texto como primera parada (conservando si
+  // esa fecha ya estaba marcada cumplida), para no perder nada. Una
+  // fecha sin texto en ese bloque simplemente queda sin responder
+  // (pregunta visible), como corresponde.
+  function migratePrevioOficinaToParadas() {
+    if (data.previoOficinaMigrated) return;
+    data.previoOficinaMigrated = true;
+    const WEEKDAY_KEYS = ["mon", "tue", "wed", "thu", "fri"];
+    Object.keys(data.weekBlocks || {}).forEach((mondayStr) => {
+      const weekBlocks = data.weekBlocks[mondayStr];
+      WEEKDAY_KEYS.forEach((dayKey) => {
+        const text = weekBlocks[dayKey] && weekBlocks[dayKey].previo_oficina;
+        if (!text) return;
+        const dateStr = dateForWeekday(mondayStr, dayKey);
+        const day = getDay(dateStr);
+        if (day.previoOficinaRespuesta) return; // ya tiene respuesta explícita: no debería pasar en esta migración, pero por las dudas no la pisa
+        day.previoOficinaRespuesta = "si";
+        const wasDone = !!(day.blocks.previo_oficina && day.blocks.previo_oficina.done);
+        getWeek(mondayStr).paradasAntesOficina.push({
+          id: uid("po"),
+          text,
+          done: wasDone,
+          dayKeys: [dayKey],
+        });
+      });
+    });
+  }
+
   // Todas estas migraciones son idempotentes (cada una revisa su propia
   // bandera y no hace nada si ya corrió). Además de correr una vez al
   // cargar la app, se vuelven a correr cada vez que llega un estado
@@ -770,6 +809,7 @@ window.Agenda = window.Agenda || {};
     migrateWeekHabitsToDayHabits();
     migrateWeekendRunDoneToBlocks();
     migrateRunQueueSeed();
+    migratePrevioOficinaToParadas();
   }
   runMigrations();
   persist();
@@ -1145,6 +1185,22 @@ window.Agenda = window.Agenda || {};
         }
       }
 
+      // Pregunta "¿Habrá paradas antes de la oficina?" (ver PARTE 1-3
+      // del pedido): reemplaza por completo el texto libre de siempre de
+      // este bloque. "done" no aplica más acá (antes era una casilla
+      // simple del bloque; ahora el cumplido vive por parada, o no
+      // aplica en absoluto si la respuesta es "No").
+      if (def.id === "previo_oficina") {
+        return { ...def, fixed: true, text: "", done: false, previoOficinaAnswer: getPrevioOficinaAnswer(dateStr) || null };
+      }
+
+      // Con "No", la oficina de la mañana se corre a 09:00-14:00; con
+      // "Sí" o sin responder todavía, sigue 10:00-14:00 de siempre (cae
+      // al tratamiento genérico de más abajo, sin tocar nada).
+      if (def.id === "oficina_manana" && getPrevioOficinaAnswer(dateStr) === "no") {
+        return { ...def, time: "09:00–14:00", fixed: true, text: "", done, previoOficinaMerged: true };
+      }
+
       const override = getAutoBlockOverride(def, dateStr);
       if (override !== undefined) {
         return { ...def, fixed: true, text: override, done };
@@ -1322,6 +1378,8 @@ window.Agenda = window.Agenda || {};
     );
   }
 
+  const REPLICATE_WEEKDAY_KEYS = ["mon", "tue", "wed", "thu", "fri"];
+
   function replicatePreviousWeek(mondayStr) {
     const prevMondayStr = ns.dateUtils.toISO(ns.dateUtils.addDays(ns.dateUtils.fromISO(mondayStr), -7));
     const prevWeek = (data.weekBlocks && data.weekBlocks[prevMondayStr]) || {};
@@ -1334,20 +1392,51 @@ window.Agenda = window.Agenda || {};
       copied[dayKey] = filtered;
     });
 
-    // Respaldo para "Deshacer réplica" (ver undoReplicateWeek): guarda el
-    // único campo que esta función toca (data.weekBlocks[mondayStr]) tal
-    // cual estaba, de una sola vez, ANTES de pisarlo. Una réplica nueva
-    // sobre la misma semana reemplaza el respaldo anterior — solo se
-    // puede deshacer la última.
+    // Paradas antes de oficina (Sí/No por fecha + la lista de esa
+    // semana): se copian con el mismo criterio que el texto libre de
+    // arriba — reemplaza lo que hubiera en la semana destino por lo de
+    // la semana anterior, sin la casilla de cumplido (igual que el resto
+    // de la réplica no copia "hecho", solo contenido).
+    const prevParadas = getWeekIfExists(prevMondayStr);
+    const copiedParadas = (prevParadas ? prevParadas.paradasAntesOficina : []).map((p) => ({
+      id: uid("po"),
+      text: p.text,
+      done: false,
+      dayKeys: p.dayKeys.slice(),
+    }));
+    const oldRespuestas = {};
+    const newRespuestas = {};
+    REPLICATE_WEEKDAY_KEYS.forEach((dayKey) => {
+      const targetDateStr = dateForWeekday(mondayStr, dayKey);
+      const prevDateStr = dateForWeekday(prevMondayStr, dayKey);
+      oldRespuestas[dayKey] = (data.days[targetDateStr] && data.days[targetDateStr].previoOficinaRespuesta) || null;
+      newRespuestas[dayKey] = (data.days[prevDateStr] && data.days[prevDateStr].previoOficinaRespuesta) || null;
+    });
+
+    // Respaldo para "Deshacer réplica" (ver undoReplicateWeek): guarda
+    // tal cual estaban, de una sola vez, ANTES de pisarlos, los tres
+    // campos que esta función toca (data.weekBlocks[mondayStr], las
+    // paradas de esa semana y la respuesta Sí/No de cada día). Una
+    // réplica nueva sobre la misma semana reemplaza el respaldo
+    // anterior — solo se puede deshacer la última.
     if (!data.weekReplicateBackups) data.weekReplicateBackups = {};
     const existing = data.weekBlocks && data.weekBlocks[mondayStr];
     data.weekReplicateBackups[mondayStr] = {
       weekBlocks: existing ? JSON.parse(JSON.stringify(existing)) : null,
+      paradas: JSON.parse(JSON.stringify(getWeek(mondayStr).paradasAntesOficina)),
+      previoOficinaRespuestas: oldRespuestas,
       replicatedAt: Date.now(),
     };
 
     if (!data.weekBlocks) data.weekBlocks = {};
     data.weekBlocks[mondayStr] = copied;
+    getWeek(mondayStr).paradasAntesOficina = copiedParadas;
+    REPLICATE_WEEKDAY_KEYS.forEach((dayKey) => {
+      const targetDateStr = dateForWeekday(mondayStr, dayKey);
+      const answer = newRespuestas[dayKey];
+      if (answer) getDay(targetDateStr).previoOficinaRespuesta = answer;
+      else if (data.days[targetDateStr]) delete data.days[targetDateStr].previoOficinaRespuesta;
+    });
     notify();
   }
 
@@ -1358,12 +1447,13 @@ window.Agenda = window.Agenda || {};
     return !!(data.weekReplicateBackups && data.weekReplicateBackups[mondayStr]);
   }
 
-  // Restituye data.weekBlocks[mondayStr] al estado guardado justo antes
-  // de la última réplica sobre esa semana (incluido dejarlo tal como
-  // estaba si esa semana no tenía nada todavía) y borra el respaldo, para
-  // que no se pueda aplicar dos veces. No toca gimnasio, corrida, meta,
-  // pendientes, hábitos ni revisión del viernes: ninguno de esos vive en
-  // este campo, así que la réplica nunca los tocó y deshacer tampoco.
+  // Restituye lo que tocó la última réplica sobre esa semana
+  // (data.weekBlocks[mondayStr], las paradas antes de oficina y la
+  // respuesta Sí/No de cada día) al estado guardado justo antes de
+  // aplicarla, y borra el respaldo para que no se pueda aplicar dos
+  // veces. No toca gimnasio, corrida, meta, pendientes de trabajo/vida
+  // personal, hábitos ni revisión del viernes: ninguno de esos vive en
+  // estos campos, así que la réplica nunca los tocó y deshacer tampoco.
   function undoReplicateWeek(mondayStr) {
     if (!hasReplicateBackup(mondayStr)) return false;
     const backup = data.weekReplicateBackups[mondayStr];
@@ -1372,6 +1462,15 @@ window.Agenda = window.Agenda || {};
     } else {
       if (!data.weekBlocks) data.weekBlocks = {};
       data.weekBlocks[mondayStr] = backup.weekBlocks;
+    }
+    getWeek(mondayStr).paradasAntesOficina = backup.paradas || [];
+    if (backup.previoOficinaRespuestas) {
+      REPLICATE_WEEKDAY_KEYS.forEach((dayKey) => {
+        const targetDateStr = dateForWeekday(mondayStr, dayKey);
+        const answer = backup.previoOficinaRespuestas[dayKey];
+        if (answer) getDay(targetDateStr).previoOficinaRespuesta = answer;
+        else if (data.days[targetDateStr]) delete data.days[targetDateStr].previoOficinaRespuesta;
+      });
     }
     delete data.weekReplicateBackups[mondayStr];
     notify();
@@ -1402,6 +1501,7 @@ window.Agenda = window.Agenda || {};
       revisionViernes: { cumplido: "", ajuste: "" },
       pendientesTrabajo: [],
       pendientesPersonal: [],
+      paradasAntesOficina: [],
     };
   }
 
@@ -1415,6 +1515,7 @@ window.Agenda = window.Agenda || {};
   function normalizeWeekCompat(week) {
     if (!week.pendientesTrabajo) week.pendientesTrabajo = [];
     if (!week.pendientesPersonal) week.pendientesPersonal = [];
+    if (!week.paradasAntesOficina) week.paradasAntesOficina = [];
     week.pendientesTrabajo.forEach((p) => {
       if (!OFFICE_BLOCK_IDS.includes(p.blockId)) p.blockId = DEFAULT_OFFICE_BLOCK_ID;
       if (!Array.isArray(p.dayKeys)) {
@@ -1618,10 +1719,9 @@ window.Agenda = window.Agenda || {};
 
   // ---------- Pendientes no cumplidos de la semana anterior ----------
   // Listas de pendientes por semana que soportan este panel: por ahora
-  // solo "Trabajo" tiene forma de agregar ítems; "Vida personal" se
-  // incluye igual (por si en el futuro se puede cargar) para no tener
-  // que tocar esto de nuevo cuando exista.
-  const PENDIENTE_LIST_KEYS = ["pendientesTrabajo", "pendientesPersonal"];
+  // "Trabajo", "Vida personal" y "Paradas antes de oficina" (ver más
+  // abajo) tienen forma de agregar ítems.
+  const PENDIENTE_LIST_KEYS = ["pendientesTrabajo", "pendientesPersonal", "paradasAntesOficina"];
 
   // Todos los pendientes sin marcar de la semana INMEDIATA anterior a
   // `mondayStr` (la que se esté mirando en la vista Semanal, no
@@ -1679,6 +1779,88 @@ window.Agenda = window.Agenda || {};
   // Semanal (removeWeekTrabajoPendiente).
   function removeOfficePendienteForDate(dateStr, id) {
     toggleWeekTrabajoPendienteDay(getMondayKey(dateStr), id, getWeekdayKey(dateStr));
+  }
+
+  // ---------- Paradas antes de oficina (09:00-10:00, lunes a viernes) ----------
+  // Reemplaza el texto libre de siempre del bloque "previo_oficina" por
+  // una pregunta Sí/No POR FECHA (day.previoOficinaRespuesta) y, cuando
+  // es "Sí", una lista de paradas propia (week.paradasAntesOficina) con
+  // el mismo tratamiento visual que "Pendientes de la semana: Trabajo"
+  // pero en su propia lista — a propósito NO es parte de
+  // pendientesTrabajo ni de OFFICE_BLOCK_IDS, para no mezclarse con
+  // "Prioridades del trabajo" ni con el selector de bloque de ese otro
+  // sistema (que siguen exactamente igual que antes). Sigue contando
+  // como pendiente de semana para el panel de "Pendientes no cumplidos"
+  // (ver PENDIENTE_LIST_KEYS más arriba), sin ningún cambio en esa
+  // lógica: solo se registró la lista nueva ahí.
+  function getPrevioOficinaAnswer(dateStr) {
+    const day = data.days[dateStr];
+    return (day && day.previoOficinaRespuesta) || undefined;
+  }
+
+  function setPrevioOficinaAnswer(dateStr, answer) {
+    if (answer !== "si" && answer !== "no") return;
+    getDay(dateStr).previoOficinaRespuesta = answer;
+    notify();
+  }
+
+  // Enlace "Cambiar: habrá paradas"/"Cambiar: no habrá paradas": vuelve
+  // a la pregunta sin responder. Las paradas ya cargadas (si las había)
+  // quedan guardadas tal cual, por si se vuelve a responder "Sí".
+  function clearPrevioOficinaAnswer(dateStr) {
+    const day = data.days[dateStr];
+    if (day) delete day.previoOficinaRespuesta;
+    notify();
+  }
+
+  function getParadas(dateStr) {
+    const dayKey = getWeekdayKey(dateStr);
+    return getWeek(getMondayKey(dateStr)).paradasAntesOficina.filter((p) => p.dayKeys.includes(dayKey));
+  }
+
+  function addParada(dateStr, text) {
+    const trimmed = (text || "").trim();
+    if (!trimmed) return;
+    getWeek(getMondayKey(dateStr)).paradasAntesOficina.push({
+      id: uid("po"),
+      text: trimmed,
+      done: false,
+      dayKeys: [getWeekdayKey(dateStr)],
+    });
+    notify();
+  }
+
+  function toggleParada(dateStr, id) {
+    const week = getWeek(getMondayKey(dateStr));
+    const p = week.paradasAntesOficina.find((p) => p.id === id);
+    if (p) p.done = !p.done;
+    notify();
+  }
+
+  function editParadaText(dateStr, id, text) {
+    const trimmed = (text || "").trim();
+    if (!trimmed) return;
+    const week = getWeek(getMondayKey(dateStr));
+    const p = week.paradasAntesOficina.find((p) => p.id === id);
+    if (p) p.text = trimmed;
+    notify();
+  }
+
+  function removeParada(dateStr, id) {
+    const week = getWeek(getMondayKey(dateStr));
+    week.paradasAntesOficina = week.paradasAntesOficina.filter((p) => p.id !== id);
+    notify();
+  }
+
+  // true si ese día quedó en "Sí" y tiene alguna parada sin marcar. Hoy
+  // este proyecto no tiene ningún sistema de avisos/recordatorios (no
+  // hay ningún "Notification" ni aviso programado en todo el código,
+  // tampoco uno de las 08:45 ni de ninguna otra hora): esta función
+  // queda lista para que, el día que se arme ese sistema, pueda
+  // consultarla para decidir si corresponde avisar — ver el mensaje del
+  // chat para más detalle.
+  function hasUnfinishedParadasToday(dateStr) {
+    return getPrevioOficinaAnswer(dateStr) === "si" && getParadas(dateStr).some((p) => !p.done);
   }
 
   function setWeekMeta(mondayStr, text) {
@@ -1874,6 +2056,15 @@ window.Agenda = window.Agenda || {};
     getOfficePendientes,
     toggleOfficePendiente,
     getOfficeBlockOptions,
+    getPrevioOficinaAnswer,
+    setPrevioOficinaAnswer,
+    clearPrevioOficinaAnswer,
+    getParadas,
+    addParada,
+    toggleParada,
+    editParadaText,
+    removeParada,
+    hasUnfinishedParadasToday,
     getUnfinishedPendientesFromPreviousWeek,
     movePendienteToWeek,
     toggleWeekHabit,
