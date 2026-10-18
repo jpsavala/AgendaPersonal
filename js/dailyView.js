@@ -9,6 +9,12 @@ window.Agenda = window.Agenda || {};
   // a un campo editable con Guardar/Cancelar, ver buildParadasList) —
   // misma idea que editingGymDate/editingRunDate más abajo.
   let editingParadaId = null;
+  // Fecha (o null) para la que se acaba de tocar "Se repite" sin que el
+  // día anterior tuviera comida elegida: solo mientras dura esta
+  // sesión (no se guarda), para mostrar el aviso "Ayer no hay comida
+  // registrada" junto al selector normal. Se limpia sola al elegir una
+  // comida, al tocar "Cambiar" o al cambiar de fecha.
+  let comidaRepeatWarningFor = null;
 
   // ---------- Diaria de hoy: bloque en curso, colapso de lo ya pasado ----------
   // Todo esto solo aplica al día de HOY (ver isToday en render()); en
@@ -435,6 +441,7 @@ window.Agenda = window.Agenda || {};
         if (input.value.trim()) {
           state.addMeal(input.value);
           state.setBlockText(dateStr, MEAL_BLOCK_ID, input.value.trim());
+          comidaRepeatWarningFor = null;
         }
         addingMeal = false;
         render(containerRef);
@@ -468,6 +475,8 @@ window.Agenda = window.Agenda || {};
           return;
         }
         state.setBlockText(dateStr, MEAL_BLOCK_ID, val);
+        comidaRepeatWarningFor = null;
+        render(containerRef);
       },
     });
     select.appendChild(el("option", { value: "" }, "— Elegir comida —"));
@@ -481,6 +490,78 @@ window.Agenda = window.Agenda || {};
     select.appendChild(el("option", { value: ADD_NEW_MEAL_VALUE }, "+ Agregar nueva..."));
     select.value = currentText || "";
     return select;
+  }
+
+  // Bloque "preparar_comida" (14:00-15:00): antes de mostrar el selector
+  // de siempre, pregunta "¿Se repite la comida de ayer?" por fecha (ver
+  // state.getComidaAnswer). Tres estados posibles:
+  // - Sin responder: la pregunta con "Se repite"/"Cocino".
+  // - "repite": el texto copiado, de solo lectura, con "Cambiar".
+  // - "cocino": el selector completo de siempre (buildMealSelector),
+  //   con "Cambiar" al lado — y el aviso "Ayer no hay comida
+  //   registrada" si llegó acá porque "Se repite" no tenía nada que
+  //   copiar (ver comidaRepeatWarningFor).
+  function buildComidaBlock(dateStr, currentText) {
+    const answer = state.getComidaAnswer(dateStr);
+    const changeLink = el(
+      "button",
+      {
+        class: "link-btn",
+        onclick: () => {
+          state.clearComidaAnswer(dateStr);
+          comidaRepeatWarningFor = null;
+          render(containerRef);
+        },
+      },
+      "Cambiar"
+    );
+
+    if (!answer) {
+      return el(
+        "div",
+        { class: "comida-pregunta" },
+        el("p", null, "¿Se repite la comida de ayer?"),
+        el(
+          "div",
+          { class: "gym-actions" },
+          el(
+            "button",
+            {
+              class: "btn-secondary",
+              onclick: () => {
+                const copied = state.repeatYesterdayComida(dateStr);
+                comidaRepeatWarningFor = copied ? null : dateStr;
+                render(containerRef);
+              },
+            },
+            "Se repite"
+          ),
+          el(
+            "button",
+            {
+              class: "btn-primary",
+              onclick: () => {
+                state.setComidaCocino(dateStr);
+                render(containerRef);
+              },
+            },
+            "Cocino"
+          )
+        )
+      );
+    }
+
+    if (answer === "repite") {
+      return el("div", { class: "comida-repite" }, el("p", { class: "schedule-readonly-text" }, currentText || ""), changeLink);
+    }
+
+    return el(
+      "div",
+      { class: "comida-cocino" },
+      comidaRepeatWarningFor === dateStr ? el("p", { class: "muted comida-warning" }, "Ayer no hay comida registrada") : null,
+      buildMealSelector(dateStr, currentText),
+      changeLink
+    );
   }
 
   function render(container) {
@@ -505,6 +586,7 @@ window.Agenda = window.Agenda || {};
           editingGymDate = null;
           editingRunDate = null;
           editingParadaId = null;
+          comidaRepeatWarningFor = null;
           manuallyExpandedBlockIds = new Set();
           renderWithTransition(container);
         },
@@ -518,6 +600,7 @@ window.Agenda = window.Agenda || {};
           editingGymDate = null;
           editingRunDate = null;
           editingParadaId = null;
+          comidaRepeatWarningFor = null;
           manuallyExpandedBlockIds = new Set();
           renderWithTransition(container);
         },
@@ -709,7 +792,7 @@ window.Agenda = window.Agenda || {};
         block.fixed
           ? (block.text ? el("p", { class: "schedule-readonly-text" }, block.text) : null)
           : block.id === MEAL_BLOCK_ID
-          ? buildMealSelector(dateStr, block.text)
+          ? buildComidaBlock(dateStr, block.text)
           : el("input", {
               type: "text",
               class: "schedule-input",
@@ -1062,6 +1145,7 @@ window.Agenda = window.Agenda || {};
     editingGymDate = null;
     editingRunDate = null;
     editingParadaId = null;
+    comidaRepeatWarningFor = null;
     manuallyExpandedBlockIds = new Set();
     if (containerRef) renderWithTransition(containerRef);
   }

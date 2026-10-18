@@ -896,6 +896,60 @@ window.Agenda = window.Agenda || {};
     return meal;
   }
 
+  // ---------- Comida (14:00-15:00, bloque "preparar_comida") ----------
+  // Antes de elegir la comida del día, pregunta si se repite la de ayer
+  // o si hoy se cocina algo (elegido del selector de siempre). La
+  // respuesta vive por fecha (day.comidaRespuesta: "repite" | "cocino" |
+  // "pending") y es independiente del toggle "día que cocino" (day.cocina,
+  // ver setDayCocina): ninguna de las funciones de acá abajo lo lee ni
+  // lo toca.
+  //
+  // "pending" es el resultado de tocar "Cambiar" (ver clearComidaAnswer):
+  // vuelve a mostrar la pregunta aunque el bloque ya tenga una comida
+  // guardada de antes (que no se borra, por si se vuelve a elegir sin
+  // cambiarla). Sin ninguna de las tres guardada todavía, se trata como
+  // "Cocino" ya respondido si YA había una comida elegida de antes de
+  // que existiera esta pregunta (compatibilidad: no hace falta migrar
+  // nada, se detecta sola con el texto que ya hubiera).
+  const MEAL_BLOCK_ID = "preparar_comida";
+
+  function getComidaAnswer(dateStr) {
+    const day = data.days[dateStr];
+    if (day && day.comidaRespuesta === "pending") return undefined;
+    if (day && day.comidaRespuesta) return day.comidaRespuesta;
+    if (getBlockText(dateStr, MEAL_BLOCK_ID)) return "cocino";
+    return undefined;
+  }
+
+  function setComidaCocino(dateStr) {
+    getDay(dateStr).comidaRespuesta = "cocino";
+    notify();
+  }
+
+  // "Se repite": copia el VALOR (no vincula los días) de la comida del
+  // día natural anterior. Devuelve true si copió algo; false si ayer no
+  // tenía nada elegido (en ese caso igual queda en "Cocino", para que la
+  // vista muestre el selector normal en vez de quedarse sin salida).
+  function repeatYesterdayComida(dateStr) {
+    const prevDateStr = toISO(ns.dateUtils.addDays(ns.dateUtils.fromISO(dateStr), -1));
+    const prevMeal = getBlockText(prevDateStr, MEAL_BLOCK_ID);
+    if (!prevMeal) {
+      getDay(dateStr).comidaRespuesta = "cocino";
+      notify();
+      return false;
+    }
+    setBlockText(dateStr, MEAL_BLOCK_ID, prevMeal);
+    getDay(dateStr).comidaRespuesta = "repite";
+    notify();
+    return true;
+  }
+
+  // Enlace "Cambiar": vuelve a la pregunta sin responder.
+  function clearComidaAnswer(dateStr) {
+    getDay(dateStr).comidaRespuesta = "pending";
+    notify();
+  }
+
   function updateMeal(id, name) {
     const trimmed = name.trim();
     if (!trimmed) return;
@@ -1406,25 +1460,35 @@ window.Agenda = window.Agenda || {};
     }));
     const oldRespuestas = {};
     const newRespuestas = {};
+    // Comida: la pregunta "¿Se repite la comida de ayer?" (day.
+    // comidaRespuesta) no se copia de la semana anterior como tal — se
+    // LIMPIA en la semana destino (igual que el resto de la réplica,
+    // "reemplaza lo que hubiera") para que la comida recién copiada en
+    // data.weekBlocks de más abajo se vea sola vía la compatibilidad de
+    // getComidaAnswer, en vez de quedar tapada por un "pending"/
+    // "repite"/"cocino" viejo de antes de replicar.
+    const oldComidaRespuestas = {};
     REPLICATE_WEEKDAY_KEYS.forEach((dayKey) => {
       const targetDateStr = dateForWeekday(mondayStr, dayKey);
       const prevDateStr = dateForWeekday(prevMondayStr, dayKey);
       oldRespuestas[dayKey] = (data.days[targetDateStr] && data.days[targetDateStr].previoOficinaRespuesta) || null;
       newRespuestas[dayKey] = (data.days[prevDateStr] && data.days[prevDateStr].previoOficinaRespuesta) || null;
+      oldComidaRespuestas[dayKey] = (data.days[targetDateStr] && data.days[targetDateStr].comidaRespuesta) || null;
     });
 
     // Respaldo para "Deshacer réplica" (ver undoReplicateWeek): guarda
-    // tal cual estaban, de una sola vez, ANTES de pisarlos, los tres
-    // campos que esta función toca (data.weekBlocks[mondayStr], las
-    // paradas de esa semana y la respuesta Sí/No de cada día). Una
-    // réplica nueva sobre la misma semana reemplaza el respaldo
-    // anterior — solo se puede deshacer la última.
+    // tal cual estaban, de una sola vez, ANTES de pisarlos, los campos
+    // que esta función toca (data.weekBlocks[mondayStr], las paradas de
+    // esa semana, la respuesta Sí/No de "paradas antes de oficina" y la
+    // de "comida" de cada día). Una réplica nueva sobre la misma semana
+    // reemplaza el respaldo anterior — solo se puede deshacer la última.
     if (!data.weekReplicateBackups) data.weekReplicateBackups = {};
     const existing = data.weekBlocks && data.weekBlocks[mondayStr];
     data.weekReplicateBackups[mondayStr] = {
       weekBlocks: existing ? JSON.parse(JSON.stringify(existing)) : null,
       paradas: JSON.parse(JSON.stringify(getWeek(mondayStr).paradasAntesOficina)),
       previoOficinaRespuestas: oldRespuestas,
+      comidaRespuestas: oldComidaRespuestas,
       replicatedAt: Date.now(),
     };
 
@@ -1436,6 +1500,7 @@ window.Agenda = window.Agenda || {};
       const answer = newRespuestas[dayKey];
       if (answer) getDay(targetDateStr).previoOficinaRespuesta = answer;
       else if (data.days[targetDateStr]) delete data.days[targetDateStr].previoOficinaRespuesta;
+      if (data.days[targetDateStr]) delete data.days[targetDateStr].comidaRespuesta;
     });
     notify();
   }
@@ -1470,6 +1535,14 @@ window.Agenda = window.Agenda || {};
         const answer = backup.previoOficinaRespuestas[dayKey];
         if (answer) getDay(targetDateStr).previoOficinaRespuesta = answer;
         else if (data.days[targetDateStr]) delete data.days[targetDateStr].previoOficinaRespuesta;
+      });
+    }
+    if (backup.comidaRespuestas) {
+      REPLICATE_WEEKDAY_KEYS.forEach((dayKey) => {
+        const targetDateStr = dateForWeekday(mondayStr, dayKey);
+        const answer = backup.comidaRespuestas[dayKey];
+        if (answer) getDay(targetDateStr).comidaRespuesta = answer;
+        else if (data.days[targetDateStr]) delete data.days[targetDateStr].comidaRespuesta;
       });
     }
     delete data.weekReplicateBackups[mondayStr];
@@ -1994,6 +2067,10 @@ window.Agenda = window.Agenda || {};
     getHabitsDefs,
     getMealLibrary,
     addMeal,
+    getComidaAnswer,
+    setComidaCocino,
+    repeatYesterdayComida,
+    clearComidaAnswer,
     updateMeal,
     removeMeal,
     addHabit,
