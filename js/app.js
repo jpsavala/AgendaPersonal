@@ -5,6 +5,7 @@ window.Agenda = window.Agenda || {};
     semanal: ns.weeklyView,
     mensual: ns.monthlyView,
     comidas: ns.mealsView,
+    gimnasio: ns.gymView,
     anio: ns.yearView,
   };
   let activeTab = "diaria";
@@ -75,6 +76,19 @@ window.Agenda = window.Agenda || {};
     requestAnimationFrame(() => window.scrollTo(0, session.returnScrollY));
   }
 
+  // "Registrar" (ver js/dailyView.js y js/weeklyView.js, bloque de
+  // gimnasio): abre esa sesión en la pestaña Gimnasio, en el bloque,
+  // semana y día que le corresponden a esa fecha según la cola +
+  // puntero (ver state.getGymSessionLocation). No crea ninguna sesión
+  // transitoria para "volver" como startParadaCapture — es solo una
+  // navegación directa, igual que elegir la pestaña a mano.
+  function openGymSession(dateStr) {
+    const location = ns.state.getGymSessionLocation(dateStr);
+    if (!location || !ns.gymView) return;
+    ns.gymView.openSession(location);
+    switchTab("gimnasio");
+  }
+
   function setupTabs() {
     // Dos juegos de botones con la misma clase/data-tab: la nav de
     // arriba (escritorio) y la barra inferior (mobile, ver index.html).
@@ -124,5 +138,6 @@ window.Agenda = window.Agenda || {};
     startParadaCapture,
     getParadaCaptureSession,
     endParadaCapture,
+    openGymSession,
   };
 })(window.Agenda);

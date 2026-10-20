@@ -364,6 +364,22 @@ window.Agenda = window.Agenda || {};
         )
       );
     }
+    // "Registrar": abre esta sesión en la pestaña Gimnasio (peso/reps/
+    // RIR), en el bloque/semana/día correctos — ver ns.app.openGymSession
+    // (mismo mecanismo de cambio de pestaña que startParadaCapture). No
+    // reemplaza nada de arriba (Sí/No/Corregir siguen igual, cola +
+    // puntero sin cambios): registrar series no marca cumplido, ni al
+    // revés. Solo aparece si hay una sesión real de algún bloque ese día
+    // (no en "Descanso" ni "No disponible", que no tienen gymBlockNumber).
+    if (block.gymBlockNumber) {
+      parts.push(
+        el(
+          "button",
+          { class: "link-btn gym-registrar-btn", onclick: () => ns.app.openGymSession(dateStr) },
+          "Registrar"
+        )
+      );
+    }
     const todayStr = dateUtils.toISO(new Date());
     if (dateStr > todayStr) {
       const unavailable = state.isGymUnavailable(dateStr);
@@ -800,7 +816,7 @@ window.Agenda = window.Agenda || {};
         "div",
         { class: "schedule-block-body" },
         block.fixed
-          ? (block.text ? el("p", { class: "schedule-readonly-text" }, block.text) : null)
+          ? (block.text ? el("p", { class: "schedule-readonly-text" }, block.gymDiariaText || block.text) : null)
           : block.id === MEAL_BLOCK_ID
           ? buildComidaBlock(dateStr, block.text)
           : el("input", {

@@ -1564,3 +1564,271 @@ h2, h3, h4 {
     padding: 0.5rem 0.6rem;
   }
 }
+
+/* ---------- Pestaña Gimnasio (registro de peso/reps/RIR, ver
+   js/gymView.js) ---------- */
+
+.gym-header {
+  justify-content: space-between;
+}
+
+.gym-block-selector,
+.gym-week-tabs {
+  flex-wrap: wrap;
+  margin-bottom: 0.9rem;
+}
+
+.gym-block-selector .toggle-btn,
+.gym-week-tabs .toggle-btn {
+  flex: 1 1 auto;
+  min-width: 5.5rem;
+}
+
+.gym-rules-card {
+  border-left: 3px solid var(--accent-gold);
+}
+
+.gym-rules-line {
+  margin: 0 0 0.35rem;
+  font-size: 0.9rem;
+  color: var(--text-primary);
+}
+
+.gym-days-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+.gym-day-card {
+  padding: 0.9rem 1rem;
+}
+
+.gym-day-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+  cursor: pointer;
+}
+
+.gym-day-head h4 {
+  margin: 0;
+}
+
+.gym-today-badge {
+  flex: 0 0 auto;
+  background: var(--accent-gold);
+  color: var(--text-primary);
+  font-size: 0.72rem;
+  font-weight: 700;
+  border-radius: 999px;
+  padding: 0.15rem 0.6rem;
+}
+
+.gym-day-note {
+  margin: 0.6rem 0;
+}
+
+.gym-exercise-card {
+  margin-top: 0.7rem;
+  padding: 0.75rem 0.85rem;
+}
+
+.gym-exercise-card.collapsed {
+  padding-bottom: 0.75rem;
+}
+
+.gym-exercise-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.gym-exercise-toggle {
+  flex: 1 1 auto;
+  background: transparent;
+  border: none;
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: 0.98rem;
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+  padding: 0.2rem 0;
+}
+
+.gym-exercise-head-actions {
+  flex: 0 0 auto;
+  display: flex;
+  gap: 0.25rem;
+  align-items: center;
+}
+
+.gym-exercise-head-actions .btn-icon {
+  width: 1.9rem;
+  height: 1.9rem;
+  font-size: 0.85rem;
+}
+
+.gym-exercise-reference {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 0.3rem 0 0;
+}
+
+.gym-exercise-target {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.gym-exercise-prev {
+  font-size: 0.8rem;
+  color: var(--accent-green-light);
+  font-weight: 600;
+}
+
+.gym-exercise-body {
+  margin-top: 0.6rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.gym-exercise-note-input {
+  margin-top: 0.1rem;
+}
+
+/* Cada serie en una sola fila compacta, pensada primero para celular:
+   los campos (peso, unidad, barra, reps, RIR) van en su propia franja
+   que envuelve si no entra, la nota y el botón de quitar debajo en su
+   propia línea cuando haga falta — nunca se corta un campo a la mitad. */
+.gym-set-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.5rem 0.6rem;
+}
+
+.gym-set-fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  flex: 1 1 100%;
+}
+
+.gym-set-weight,
+.gym-set-bar {
+  width: 5.2rem;
+  flex: 1 1 5.2rem;
+}
+
+.gym-set-reps,
+.gym-set-rir {
+  width: 4rem;
+  flex: 1 1 4rem;
+}
+
+.gym-set-weight,
+.gym-set-bar,
+.gym-set-reps,
+.gym-set-rir {
+  padding: 0.55rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-family: var(--font-sans);
+  font-size: 0.95rem;
+  background: var(--surface);
+  color: var(--text-primary);
+  min-height: 2.4rem;
+  box-sizing: border-box;
+}
+
+.gym-set-unit {
+  flex: 1 1 8rem;
+  min-width: 7rem;
+  padding: 0.5rem 0.4rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-family: var(--font-sans);
+  font-size: 0.85rem;
+  background: var(--surface);
+  color: var(--text-primary);
+  min-height: 2.4rem;
+}
+
+.gym-set-row .gym-set-note {
+  flex: 1 1 100%;
+  min-height: 2.4rem;
+}
+
+.gym-set-row .btn-remove {
+  flex: 0 0 auto;
+  margin-left: auto;
+  font-size: 1.3rem;
+  min-width: 2rem;
+}
+
+.gym-set-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.gym-exercise-edit {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.gym-exercise-edit .add-input,
+.gym-exercise-edit .block-select {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.gym-add-exercise-row {
+  margin-top: 0.8rem;
+  padding-top: 0.6rem;
+  border-top: 1px dashed var(--border);
+}
+
+.gym-registrar-btn {
+  margin-top: 0.3rem;
+}
+
+/* El teclado en pantalla no debe tapar el campo activo: al enfocar un
+   campo de serie, nos asegura que quede visible aun con el teclado
+   abierto (ver body.keyboard-open, mismo criterio que el resto de la
+   app). */
+.gym-set-row input:focus,
+.gym-set-weight:focus,
+.gym-set-bar:focus,
+.gym-set-reps:focus,
+.gym-set-rir:focus {
+  scroll-margin-bottom: 1rem;
+}
+
+@media (max-width: 480px) {
+  .gym-set-weight,
+  .gym-set-bar,
+  .gym-set-reps,
+  .gym-set-rir,
+  .gym-set-unit {
+    flex: 1 1 45%;
+  }
+
+  .gym-exercise-head-actions .btn-icon {
+    width: 2.2rem;
+    height: 2.2rem;
+  }
+}

@@ -446,6 +446,108 @@ window.Agenda = window.Agenda || {};
     };
   }
 
+  // ---------- Bloque 6: cola propia con nuevo orden de días ----------
+  // Hasta el Bloque 5 (arriba), toda la app usaba un solo data.gymQueue.
+  // A partir de acá puede haber más de un bloque a la vez en el tiempo
+  // (uno que se cierra, otro que arranca): data.gymBlocks reemplaza a
+  // data.gymQueue con una colección por número de bloque, cada uno con
+  // su propio rango de fechas [startDate, endDate] y su propio estado
+  // de cola + puntero (los mismos campos pointer/pointerAtSeed/
+  // seedAnchor/resolutions/unavailable de siempre, un juego por bloque
+  // en vez de uno global) — el motor genérico de scheduleQueue.js no
+  // cambia en nada, solo se lo llama una vez por bloque según a cuál le
+  // corresponda la fecha consultada (ver findGymBlockForDate). El
+  // Bloque 5 cierra el 19 de octubre de 2026 sin su Semana 4 de
+  // descarga (esas sesiones quedan tal cual, sin realizar); el 20 de
+  // octubre arranca el Bloque 6 desde cero con su propio orden de cola
+  // (Torso, Empuje, Glúteo/Femoral, Tracción, Cuádriceps).
+  const GYM_BLOCK_5_END_DATE = "2026-10-19";
+  const GYM_BLOCK_6_START_DATE = "2026-10-20";
+  const GYM_BLOCK_6_END_DATE = "2026-11-16"; // después de esta fecha, edición manual como antes
+  const GYM_BLOCK_6_ROUND = ["Torso", "Empuje", "Glúteo/Femoral", "Tracción", "Cuádriceps"];
+  const GYM_BLOCK_6_SESSIONS = [1, 2, 3, 4].flatMap((week) =>
+    GYM_BLOCK_6_ROUND.map((s) => (week === 4 ? `${s} S${week} (descarga)` : `${s} S${week}`))
+  );
+
+  // Migración única: envuelve el data.gymQueue de siempre (ya resuelto
+  // por todas las correcciones de arriba) como Bloque 5 cerrado, y crea
+  // el Bloque 6 vacío desde el 20 de octubre. Cualquier resolución que
+  // hubiera quedado fechada el 20 de octubre o después (no debería
+  // haber ninguna a esta altura) se descarta del Bloque 5 al envolverlo,
+  // para que "cierra sin su Semana 4" se cumpla incluso si algo llegó a
+  // marcarse ese día antes de esta migración.
+  function migrateGymBlocksStructure() {
+    if (data.gymBlocksMigrated) return;
+    data.gymBlocksMigrated = true;
+    const oldQueue =
+      data.gymQueue || { pointer: 0, pointerAtSeed: 0, seedAnchor: GYM_BLOCK_6_START_DATE, resolutions: {}, unavailable: {} };
+    const block5Resolutions = {};
+    Object.keys(oldQueue.resolutions).forEach((d) => {
+      if (d <= GYM_BLOCK_5_END_DATE) block5Resolutions[d] = oldQueue.resolutions[d];
+    });
+    const block5Unavailable = {};
+    Object.keys(oldQueue.unavailable || {}).forEach((d) => {
+      if (d <= GYM_BLOCK_5_END_DATE) block5Unavailable[d] = true;
+    });
+    data.gymBlocks = {
+      5: {
+        number: 5,
+        sessions: GYM_QUEUE_SESSIONS,
+        startDate: oldQueue.seedAnchor,
+        endDate: GYM_BLOCK_5_END_DATE,
+        pointer: oldQueue.pointer,
+        pointerAtSeed: oldQueue.pointerAtSeed,
+        seedAnchor: oldQueue.seedAnchor,
+        resolutions: block5Resolutions,
+        unavailable: block5Unavailable,
+      },
+      6: {
+        number: 6,
+        sessions: GYM_BLOCK_6_SESSIONS,
+        startDate: GYM_BLOCK_6_START_DATE,
+        endDate: GYM_BLOCK_6_END_DATE,
+        pointer: 0,
+        pointerAtSeed: 0,
+        seedAnchor: GYM_BLOCK_6_START_DATE,
+        resolutions: {},
+        unavailable: {},
+      },
+    };
+  }
+
+  // Migración única: carga, como semilla, la rutina/reglas/progresión y
+  // el historial ya conocido de cada bloque (ver js/gymRoutines.js) en
+  // su data.gymBlocks correspondiente — corre después de
+  // migrateGymBlocksStructure (necesita que los bloques ya existan). De
+  // ahí en más todo se edita desde la cuenta; esta función no vuelve a
+  // tocar nada una vez que corrió.
+  function migrateGymRoutinesSeed() {
+    if (data.gymRoutinesSeeded) return;
+    data.gymRoutinesSeeded = true;
+    if (!data.gymBlocks || !ns.gymRoutines) return;
+    const seeds = ns.gymRoutines.BLOCK_SEEDS;
+    Object.keys(seeds).forEach((num) => {
+      const block = data.gymBlocks[num];
+      const seed = seeds[num];
+      if (!block || !seed) return;
+      block.label = seed.label;
+      block.dayNames = seed.dayNames;
+      block.rules = seed.rules;
+      block.progression = seed.progression;
+      block.routine = JSON.parse(JSON.stringify(seed.routine));
+      block.weeks = JSON.parse(JSON.stringify(seed.weeks));
+    });
+  }
+
+  // Bloque (de data.gymBlocks) al que le corresponde esta fecha, o null
+  // si cae antes/después de todos los rangos conocidos (comportamiento
+  // manual, igual que "cola agotada" de siempre).
+  function findGymBlockForDate(dateStr) {
+    if (!data.gymBlocks) return null;
+    const blocks = Object.values(data.gymBlocks).sort((a, b) => a.number - b.number);
+    return blocks.find((b) => dateStr >= b.startDate && dateStr <= b.endDate) || null;
+  }
+
   // Cuenta cuántos días hábiles (lunes a viernes) hay entre dos fechas,
   // ambas incluidas. Cálculo puramente de calendario, sin mirar
   // resoluciones.
@@ -475,11 +577,11 @@ window.Agenda = window.Agenda || {};
   // hábiles previos al punto donde retoma la simulación (ver
   // scheduleQueue.anchorOf), y de ahí en adelante lo va sumando día a
   // día en el mismo orden en que los recorre resolve().
-  function makeIsValidGymDay() {
-    const anchor = ns.scheduleQueue.anchorOf(data.gymQueue);
+  function makeIsValidGymDayForBlock(block) {
+    const anchor = ns.scheduleQueue.anchorOf(block);
     const dayBeforeAnchor = toISO(ns.dateUtils.addDays(ns.dateUtils.fromISO(anchor), -1));
-    const pointerAtSeed = data.gymQueue.pointerAtSeed || 0;
-    let weekdaysSoFar = pointerAtSeed + countWeekdaysBetween(data.gymQueue.seedAnchor, dayBeforeAnchor);
+    const pointerAtSeed = block.pointerAtSeed || 0;
+    let weekdaysSoFar = pointerAtSeed + countWeekdaysBetween(block.seedAnchor, dayBeforeAnchor);
     return function (dateStr, idxSoFar) {
       const wd = ns.dateUtils.isoWeekday(ns.dateUtils.fromISO(dateStr));
       if (wd === 6) return false; // domingo: descanso siempre
@@ -491,22 +593,32 @@ window.Agenda = window.Agenda || {};
     };
   }
 
+  // dayNumber: posición 1-5 dentro de la ronda de 5 días del bloque que
+  // le corresponda (Torso/Empuje/... según el bloque), para el formato
+  // "Día X - Nombre SN" de la Diaria (ver getDayBlocks/
+  // buildSaturdayGymBlock) — independiente de qué bloque sea, siempre
+  // son grupos de 5 sesiones por semana.
   function getGymResolution(dateStr) {
-    if (!data.gymQueue) return null;
+    const block = findGymBlockForDate(dateStr);
+    if (!block) return null;
     const todayStr = toISO(new Date());
-    return ns.scheduleQueue.resolve(data.gymQueue, GYM_QUEUE_SESSIONS, dateStr, todayStr, makeIsValidGymDay());
+    const r = ns.scheduleQueue.resolve(block, block.sessions, dateStr, todayStr, makeIsValidGymDayForBlock(block));
+    if (!r) return null;
+    return { ...r, blockNumber: block.number, dayNumber: (r.index % 5) + 1 };
   }
 
   function markGymDone(dateStr) {
-    if (!data.gymQueue) return;
+    const block = findGymBlockForDate(dateStr);
+    if (!block) return;
     const todayStr = toISO(new Date());
-    if (ns.scheduleQueue.markDone(data.gymQueue, GYM_QUEUE_SESSIONS, dateStr, todayStr, makeIsValidGymDay())) notify();
+    if (ns.scheduleQueue.markDone(block, block.sessions, dateStr, todayStr, makeIsValidGymDayForBlock(block))) notify();
   }
 
   function markGymSkipped(dateStr) {
-    if (!data.gymQueue) return;
+    const block = findGymBlockForDate(dateStr);
+    if (!block) return;
     const todayStr = toISO(new Date());
-    if (ns.scheduleQueue.markSkipped(data.gymQueue, GYM_QUEUE_SESSIONS, dateStr, todayStr, makeIsValidGymDay())) notify();
+    if (ns.scheduleQueue.markSkipped(block, block.sessions, dateStr, todayStr, makeIsValidGymDayForBlock(block))) notify();
   }
 
   // Corrige una respuesta de "¿Entrenaste hoy?" ya guardada (de
@@ -514,16 +626,19 @@ window.Agenda = window.Agenda || {};
   // que se haya congelado sola sin marcar nunca). Si el cambio entra en
   // conflicto con una fecha posterior que ya tiene su propia respuesta
   // guardada, no cambia nada: devuelve el conflicto para que la UI lo
-  // muestre antes de decidir.
+  // muestre antes de decidir. Sigue funcionando igual para fechas del
+  // Bloque 5 (cerrado) y del Bloque 6 (vigente): cada una corrige contra
+  // el bloque al que le corresponde su propia fecha.
   function editGymDay(dateStr, done) {
-    if (!data.gymQueue) return { ok: false, reason: "not-resolved" };
+    const block = findGymBlockForDate(dateStr);
+    if (!block) return { ok: false, reason: "not-resolved" };
     const todayStr = toISO(new Date());
     const result = ns.scheduleQueue.editResolution(
-      data.gymQueue,
-      GYM_QUEUE_SESSIONS,
+      block,
+      block.sessions,
       dateStr,
       todayStr,
-      makeIsValidGymDay(),
+      makeIsValidGymDayForBlock(block),
       done ? "done" : "skipped"
     );
     if (result.ok && result.changed) notify();
@@ -531,14 +646,16 @@ window.Agenda = window.Agenda || {};
   }
 
   function isGymUnavailable(dateStr) {
-    return !!(data.gymQueue && data.gymQueue.unavailable[dateStr]);
+    const block = findGymBlockForDate(dateStr);
+    return !!(block && block.unavailable[dateStr]);
   }
 
   // Solo tiene sentido marcar fechas futuras (ver UI): no valida acá para
   // no acoplar esta capa de datos con "hoy" más de lo necesario.
   function setGymUnavailable(dateStr, unavailable) {
-    if (!data.gymQueue) return;
-    ns.scheduleQueue.setUnavailable(data.gymQueue, dateStr, unavailable);
+    const block = findGymBlockForDate(dateStr);
+    if (!block) return;
+    ns.scheduleQueue.setUnavailable(block, dateStr, unavailable);
     notify();
   }
 
@@ -549,6 +666,287 @@ window.Agenda = window.Agenda || {};
   function getSaturdayGymResolution(dateStr) {
     if (ns.dateUtils.isoWeekday(ns.dateUtils.fromISO(dateStr)) !== 5) return undefined;
     return getGymResolution(dateStr) || undefined;
+  }
+
+  // ---------- Registro de gimnasio: peso, repeticiones y RIR ----------
+  // Independiente por completo de la cola + puntero de arriba (nunca
+  // leen gymStatus/pointer/resolutions, ni los tocan): registrar series
+  // no marca la sesión como cumplida, ni al revés (ver el pedido
+  // original, parte B.5). Vive dentro de cada data.gymBlocks[number],
+  // en tres campos nuevos junto a los de la cola:
+  // - dayNames: los 5 nombres de día de ESTE bloque, en su propio orden
+  //   de cola (Torso/Empuje/... — puede diferir de otro bloque).
+  // - routine: { [día 1-5]: [ {id, name, target, mode, order}, ... ] },
+  //   la rutina editable de cada día (ver las funciones de edición más
+  //   abajo). "mode" es "sets" (series con peso/reps/RIR) o "simple"
+  //   (una sola casilla "hecho" + nota, para ejercicios sin peso).
+  // - weeks: { [semana 1-4]: { [día 1-5]: { dayNote, exercises: {
+  //   [exerciseId]: { note, sets: [...], done? } } } } } — solo existen
+  //   las semanas/días/ejercicios que ya se tocaron (no se crean vacíos
+  //   solo por mirarlos, ver getGymWeekDay).
+  const GYM_SET_UNITS = {
+    total: "lb totales",
+    perSide: "lb por lado",
+    perSideBar: "lb por lado + barra",
+    bodyweight: "peso corporal",
+    none: "sin peso",
+  };
+
+  function getGymBlockNumbers() {
+    if (!data.gymBlocks) return [];
+    return Object.values(data.gymBlocks)
+      .map((b) => b.number)
+      .sort((a, b) => a - b);
+  }
+
+  function getGymBlockMeta(blockNumber) {
+    const block = data.gymBlocks && data.gymBlocks[blockNumber];
+    if (!block) return null;
+    return {
+      number: block.number,
+      label: block.label || `Bloque ${block.number}`,
+      dayNames: block.dayNames || [],
+      rules: block.rules || "",
+      progression: block.progression || "",
+      startDate: block.startDate,
+      endDate: block.endDate,
+    };
+  }
+
+  // El bloque + semana + día que le corresponde HOY, para abrir la
+  // pestaña Gimnasio ya posicionada ahí (ver ns.app.openGymSession). Se
+  // deriva de getGymResolution de la fecha que se pida (no solo "hoy"):
+  // la semana es 1 + cuántos grupos de 5 sesiones (índice de la cola)
+  // ya pasaron.
+  function getGymSessionLocation(dateStr) {
+    const r = getGymResolution(dateStr);
+    if (!r) return null;
+    return { blockNumber: r.blockNumber, week: Math.floor(r.index / 5) + 1, day: r.dayNumber };
+  }
+
+  function getGymRoutineDay(blockNumber, day) {
+    const block = data.gymBlocks && data.gymBlocks[blockNumber];
+    if (!block || !block.routine) return [];
+    return (block.routine[day] || []).slice().sort((a, b) => a.order - b.order);
+  }
+
+  // Lectura pura: no crea nada en los datos solo por consultar una
+  // semana/día que todavía no se tocó (para no dejar semanas "vacías"
+  // guardadas de más, mismo criterio que getWeekIfExists).
+  function getGymWeekDay(blockNumber, week, day) {
+    const block = data.gymBlocks && data.gymBlocks[blockNumber];
+    const weekLog = block && block.weeks && block.weeks[week];
+    return (weekLog && weekLog[day]) || { dayNote: "", exercises: {} };
+  }
+
+  // Crea (si hace falta) y devuelve la semana/día/ejercicio exactos
+  // donde escribir — a diferencia de getGymWeekDay, esta sí persiste la
+  // estructura mínima para poder guardar algo adentro.
+  function ensureGymExerciseLog(blockNumber, week, day, exerciseId) {
+    const block = data.gymBlocks && data.gymBlocks[blockNumber];
+    if (!block) return null;
+    if (!block.weeks) block.weeks = {};
+    if (!block.weeks[week]) block.weeks[week] = {};
+    if (!block.weeks[week][day]) block.weeks[week][day] = { dayNote: "", exercises: {} };
+    if (!block.weeks[week][day].exercises[exerciseId]) {
+      block.weeks[week][day].exercises[exerciseId] = { note: "", sets: [] };
+    }
+    return block.weeks[week][day].exercises[exerciseId];
+  }
+
+  function setGymDayNote(blockNumber, week, day, text) {
+    const block = data.gymBlocks && data.gymBlocks[blockNumber];
+    if (!block) return;
+    if (!block.weeks) block.weeks = {};
+    if (!block.weeks[week]) block.weeks[week] = {};
+    if (!block.weeks[week][day]) block.weeks[week][day] = { dayNote: "", exercises: {} };
+    block.weeks[week][day].dayNote = text;
+    notify();
+  }
+
+  function setGymExerciseNote(blockNumber, week, day, exerciseId, text) {
+    const log = ensureGymExerciseLog(blockNumber, week, day, exerciseId);
+    if (!log) return;
+    log.note = text;
+    notify();
+  }
+
+  function blankGymSet() {
+    return { id: uid("gset"), weight: null, unit: "total", barWeight: null, reps: "", rir: "", note: "" };
+  }
+
+  function addGymSet(blockNumber, week, day, exerciseId) {
+    const log = ensureGymExerciseLog(blockNumber, week, day, exerciseId);
+    if (!log) return;
+    log.sets.push(blankGymSet());
+    notify();
+  }
+
+  // "Copiar serie anterior": mismo peso/unidad/barra/reps/RIR que la
+  // última serie ya cargada, sin la nota (una nota de la serie anterior
+  // casi nunca aplica también a la nueva).
+  function copyLastGymSet(blockNumber, week, day, exerciseId) {
+    const log = ensureGymExerciseLog(blockNumber, week, day, exerciseId);
+    if (!log) return;
+    const last = log.sets[log.sets.length - 1];
+    log.sets.push({
+      id: uid("gset"),
+      weight: last ? last.weight : null,
+      unit: last ? last.unit : "total",
+      barWeight: last ? last.barWeight : null,
+      reps: last ? last.reps : "",
+      rir: last ? last.rir : "",
+      note: "",
+    });
+    notify();
+  }
+
+  function updateGymSet(blockNumber, week, day, exerciseId, setId, fields) {
+    const log = ensureGymExerciseLog(blockNumber, week, day, exerciseId);
+    if (!log) return;
+    const set = log.sets.find((s) => s.id === setId);
+    if (!set) return;
+    Object.assign(set, fields);
+    notify();
+  }
+
+  function removeGymSet(blockNumber, week, day, exerciseId, setId) {
+    const log = ensureGymExerciseLog(blockNumber, week, day, exerciseId);
+    if (!log) return;
+    log.sets = log.sets.filter((s) => s.id !== setId);
+    notify();
+  }
+
+  // Ejercicios "simple" (sin peso): una sola casilla "hecho" + nota, sin
+  // series. Vive en el mismo exerciseLog que los demás (campo `done`),
+  // para que la referencia de la semana anterior (ver más abajo) los
+  // trate de forma uniforme.
+  function setGymSimpleDone(blockNumber, week, day, exerciseId, done) {
+    const log = ensureGymExerciseLog(blockNumber, week, day, exerciseId);
+    if (!log) return;
+    log.done = done;
+    notify();
+  }
+
+  // ---------- Rutina editable (agregar/editar/reordenar/eliminar) ----------
+  function addGymExercise(blockNumber, day, { name, target, mode }) {
+    const block = data.gymBlocks && data.gymBlocks[blockNumber];
+    if (!block) return;
+    const trimmed = (name || "").trim();
+    if (!trimmed) return;
+    if (!block.routine) block.routine = {};
+    if (!block.routine[day]) block.routine[day] = [];
+    const order = block.routine[day].length;
+    block.routine[day].push({
+      id: uid(`b${blockNumber}d${day}e`),
+      name: trimmed,
+      target: (target || "").trim() || null,
+      mode: mode === "simple" ? "simple" : "sets",
+      order,
+    });
+    notify();
+  }
+
+  function updateGymExercise(blockNumber, day, exerciseId, fields) {
+    const block = data.gymBlocks && data.gymBlocks[blockNumber];
+    const list = block && block.routine && block.routine[day];
+    const exercise = list && list.find((e) => e.id === exerciseId);
+    if (!exercise) return;
+    if (fields.name !== undefined) exercise.name = fields.name.trim() || exercise.name;
+    if (fields.target !== undefined) exercise.target = fields.target.trim() || null;
+    if (fields.mode !== undefined) exercise.mode = fields.mode === "simple" ? "simple" : "sets";
+    notify();
+  }
+
+  function removeGymExercise(blockNumber, day, exerciseId) {
+    const block = data.gymBlocks && data.gymBlocks[blockNumber];
+    const list = block && block.routine && block.routine[day];
+    if (!list) return;
+    block.routine[day] = list.filter((e) => e.id !== exerciseId);
+    notify();
+  }
+
+  // orderedIds: todos los ids de ese día, en el orden final deseado.
+  function reorderGymExercises(blockNumber, day, orderedIds) {
+    const block = data.gymBlocks && data.gymBlocks[blockNumber];
+    const list = block && block.routine && block.routine[day];
+    if (!list) return;
+    orderedIds.forEach((id, i) => {
+      const exercise = list.find((e) => e.id === id);
+      if (exercise) exercise.order = i;
+    });
+    notify();
+  }
+
+  function moveGymExercise(blockNumber, day, exerciseId, delta) {
+    const block = data.gymBlocks && data.gymBlocks[blockNumber];
+    const list = block && block.routine && block.routine[day];
+    if (!list) return;
+    const sorted = list.slice().sort((a, b) => a.order - b.order);
+    const idx = sorted.findIndex((e) => e.id === exerciseId);
+    const target = idx + delta;
+    if (idx === -1 || target < 0 || target >= sorted.length) return;
+    const [item] = sorted.splice(idx, 1);
+    sorted.splice(target, 0, item);
+    reorderGymExercises(blockNumber, day, sorted.map((e) => e.id));
+  }
+
+  // ---------- Referencia de la semana anterior ----------
+  function formatGymSetWeight(set) {
+    if (set.unit === "bodyweight") return "Peso corporal";
+    if (set.unit === "none" || set.weight === null || set.weight === undefined) return "Sin peso";
+    if (set.unit === "perSide") return `${set.weight} lb/lado`;
+    if (set.unit === "perSideBar") return `${set.weight} lb/lado + barra${set.barWeight ? ` ${set.barWeight} kg` : ""}`;
+    return `${set.weight} lb`;
+  }
+
+  function formatGymReference(exLog) {
+    if (!exLog) return null;
+    if (exLog.sets && exLog.sets.length) {
+      const set = exLog.sets[0];
+      const reps = set.reps || "?";
+      const rir = set.rir ? ` @ ${set.rir} RIR` : "";
+      return `${formatGymSetWeight(set)} x ${reps}${rir}`;
+    }
+    if (exLog.done) return exLog.note || "Hecho";
+    return null;
+  }
+
+  // "Peso x reps @ RIR" de lo que se hizo en el mismo día y ejercicio la
+  // semana anterior (ver el pedido original, parte B.4). Semana > 1:
+  // misma fecha de bloque, semana-1, mismo id de ejercicio. Semana 1:
+  // la última semana CON DATOS del bloque anterior (bloque número - 1,
+  // si existe), buscando el día por NOMBRE (el orden de días puede
+  // diferir entre bloques) y el ejercicio por NOMBRE (los ids son
+  // propios de cada bloque) — si no hay bloque anterior, o no hay
+  // ningún día/ejercicio con ese nombre ahí, no muestra nada (nunca
+  // adivina una equivalencia).
+  function getGymPreviousReference(blockNumber, week, day, exerciseId) {
+    const block = data.gymBlocks && data.gymBlocks[blockNumber];
+    if (!block) return null;
+    if (week > 1) {
+      const prevDayLog = block.weeks && block.weeks[week - 1] && block.weeks[week - 1][day];
+      return formatGymReference(prevDayLog && prevDayLog.exercises[exerciseId]);
+    }
+    const prevBlock = data.gymBlocks[blockNumber - 1];
+    if (!prevBlock) return null;
+    const dayName = (block.dayNames || [])[day - 1];
+    const prevDay = (prevBlock.dayNames || []).indexOf(dayName) + 1;
+    if (prevDay <= 0) return null;
+    const exercise = (getGymRoutineDay(blockNumber, day) || []).find((e) => e.id === exerciseId);
+    if (!exercise) return null;
+    const prevWeeks = Object.keys(prevBlock.weeks || {})
+      .map(Number)
+      .sort((a, b) => b - a);
+    for (const w of prevWeeks) {
+      const prevDayLog = prevBlock.weeks[w][prevDay];
+      if (!prevDayLog) continue;
+      const prevExercise = (prevBlock.routine[prevDay] || []).find((e) => e.name === exercise.name);
+      if (!prevExercise) continue;
+      const ref = formatGymReference(prevDayLog.exercises[prevExercise.id]);
+      if (ref) return ref;
+    }
+    return null;
   }
 
   // ---------- Corrida: contador a la carrera y racha ----------
@@ -805,6 +1203,8 @@ window.Agenda = window.Agenda || {};
     migrateGymQueueCorrection2();
     migrateGymQueueCorrection3();
     migrateGymQueueCorrection4();
+    migrateGymBlocksStructure();
+    migrateGymRoutinesSeed();
     migratePrioritiesToWeekTrabajo();
     migrateWeekHabitsToDayHabits();
     migrateWeekendRunDoneToBlocks();
@@ -1098,7 +1498,15 @@ window.Agenda = window.Agenda || {};
     }
     const r = getGymResolution(dateStr);
     if (r) {
-      return { ...weekdayGymDef, fixed: true, text: r.session, done: r.status === "done", gymStatus: r.status };
+      return {
+        ...weekdayGymDef,
+        fixed: true,
+        text: r.session,
+        gymDiariaText: `Día ${r.dayNumber} - ${r.session}`,
+        done: r.status === "done",
+        gymStatus: r.status,
+        gymBlockNumber: r.blockNumber,
+      };
     }
     return { ...weekdayGymDef, fixed: true, text: "Descanso", done: false, gymStatus: "rest" };
   }
@@ -1219,7 +1627,15 @@ window.Agenda = window.Agenda || {};
         }
         const r = getGymResolution(dateStr);
         if (r) {
-          return { ...def, fixed: true, text: r.session, done: r.status === "done", gymStatus: r.status };
+          return {
+            ...def,
+            fixed: true,
+            text: r.session,
+            gymDiariaText: `Día ${r.dayNumber} - ${r.session}`,
+            done: r.status === "done",
+            gymStatus: r.status,
+            gymBlockNumber: r.blockNumber,
+          };
         }
         // Sin datos (antes de que arrancara este sistema, o cola ya
         // agotada): sigue igual que antes, editable manual.
@@ -2112,6 +2528,25 @@ window.Agenda = window.Agenda || {};
     getGymResolution,
     isGymUnavailable,
     setGymUnavailable,
+    getGymBlockNumbers,
+    getGymBlockMeta,
+    getGymSessionLocation,
+    getGymRoutineDay,
+    getGymWeekDay,
+    setGymDayNote,
+    setGymExerciseNote,
+    addGymSet,
+    copyLastGymSet,
+    updateGymSet,
+    removeGymSet,
+    setGymSimpleDone,
+    addGymExercise,
+    updateGymExercise,
+    removeGymExercise,
+    reorderGymExercises,
+    moveGymExercise,
+    getGymPreviousReference,
+    GYM_SET_UNITS,
     getRunResolution,
     markRunDone,
     markRunSkipped,

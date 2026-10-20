@@ -497,6 +497,18 @@ window.Agenda = window.Agenda || {};
               )
             );
           }
+          // "Registrar" (ver js/dailyView.js, mismo criterio): abre esta
+          // sesión en la pestaña Gimnasio. No mueve ni tapa el texto de
+          // arriba (es un elemento aparte, debajo).
+          if (block.gymBlockNumber) {
+            dayCard.appendChild(
+              el(
+                "button",
+                { class: "link-btn gym-registrar-btn", onclick: () => ns.app.openGymSession(dateStrForDay) },
+                "Registrar"
+              )
+            );
+          }
           return;
         }
         dayCard.appendChild(el("label", { class: "field-label" }, blockTitle));
