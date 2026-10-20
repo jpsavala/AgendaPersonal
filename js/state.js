@@ -754,6 +754,13 @@ window.Agenda = window.Agenda || {};
     return block.weeks[week][day].exercises[exerciseId];
   }
 
+  // Igual que setBlockText (ver más abajo): guarda con persist(), no con
+  // notify(), a propósito — es texto libre que se escribe tecla por
+  // tecla desde js/gymView.js, y notify() dispara el re-render de toda
+  // la vista (ver ns.state.onChange en js/app.js), que en un campo de
+  // texto activo le hace perder el foco al input en cada tecla. persist()
+  // guarda igual (localStorage + sincroniza con Firebase, ver
+  // js/firebaseSync.js: onPersist) sin redibujar nada.
   function setGymDayNote(blockNumber, week, day, text) {
     const block = data.gymBlocks && data.gymBlocks[blockNumber];
     if (!block) return;
@@ -761,14 +768,14 @@ window.Agenda = window.Agenda || {};
     if (!block.weeks[week]) block.weeks[week] = {};
     if (!block.weeks[week][day]) block.weeks[week][day] = { dayNote: "", exercises: {} };
     block.weeks[week][day].dayNote = text;
-    notify();
+    persist();
   }
 
   function setGymExerciseNote(blockNumber, week, day, exerciseId, text) {
     const log = ensureGymExerciseLog(blockNumber, week, day, exerciseId);
     if (!log) return;
     log.note = text;
-    notify();
+    persist();
   }
 
   function blankGymSet() {
@@ -801,13 +808,16 @@ window.Agenda = window.Agenda || {};
     notify();
   }
 
+  // persist(), no notify() — ver la nota de setGymDayNote/
+  // setGymExerciseNote de arriba: peso/reps/RIR se escriben tecla por
+  // tecla, así que esta función no puede disparar un re-render.
   function updateGymSet(blockNumber, week, day, exerciseId, setId, fields) {
     const log = ensureGymExerciseLog(blockNumber, week, day, exerciseId);
     if (!log) return;
     const set = log.sets.find((s) => s.id === setId);
     if (!set) return;
     Object.assign(set, fields);
-    notify();
+    persist();
   }
 
   function removeGymSet(blockNumber, week, day, exerciseId, setId) {

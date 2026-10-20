@@ -23,6 +23,105 @@ window.Agenda = window.Agenda || {};
   let editingExercise = null; // { day, id } o null
   let addingExerciseDay = null; // número de día (1-5) o null
 
+  // ---------- Guardado con debounce + foco que no se pierde al tipear ----------
+  // Peso/reps/RIR/notas se escriben tecla por tecla: guardar (ver
+  // js/state.js: updateGymSet/setGymExerciseNote/setGymDayNote, que ya
+  // usan persist() y no notify() a propósito) nunca redibuja esta
+  // pestaña por sí solo, así que el input nunca pierde el foco por su
+  // propia escritura. Lo de acá abajo es la otra mitad del pedido:
+  // - No llamar a esas funciones en CADA tecla (para no escribir en
+  //   localStorage/disparar la sincronización con Firebase de más):
+  //   se junta por campo con un debounce de ~700 ms desde la última
+  //   tecla (ver debouncedCommit), y se vuelca de una vez al perder el
+  //   foco (ver flushPending, en el onblur de cada campo) para no
+  //   perder nada si se cierra la app justo después de escribir.
+  // - Si de todos modos algo externo redibuja la pestaña mientras hay
+  //   un campo con foco (un cambio remoto de Firebase, ver
+  //   js/firebaseSync.js: applyRemote -> state.replaceAllData ->
+  //   notify()), restaurar el foco, el cursor y lo que ya se tecleó en
+  //   ese mismo campo después del redibujado (ver captureFocus/
+  //   restoreFocus, usados solo en refresh(), el único punto de entrada
+  //   que puede llegar durante una tecleada real).
+  const DEBOUNCE_MS = 700;
+  const pendingTimers = new Map(); // key -> id de setTimeout
+  const pendingFlush = new Map(); // key -> función que falta ejecutar
+
+  function debouncedCommit(key, commitFn) {
+    const existingTimer = pendingTimers.get(key);
+    if (existingTimer) clearTimeout(existingTimer);
+    pendingFlush.set(key, commitFn);
+    pendingTimers.set(
+      key,
+      setTimeout(() => {
+        pendingTimers.delete(key);
+        pendingFlush.delete(key);
+        commitFn();
+      }, DEBOUNCE_MS)
+    );
+  }
+
+  function flushPending(key) {
+    const timer = pendingTimers.get(key);
+    if (timer) {
+      clearTimeout(timer);
+      pendingTimers.delete(key);
+    }
+    const flush = pendingFlush.get(key);
+    if (flush) {
+      pendingFlush.delete(key);
+      flush();
+    }
+  }
+
+  // Conecta un <input>/<textarea> ya creado al guardado con debounce:
+  // "key" identifica el campo (mismo Map de arriba, y mismo atributo
+  // para encontrarlo de nuevo tras un redibujado externo, ver
+  // captureFocus/restoreFocus). commitFn no recibe el valor como
+  // argumento: lee input.value en el momento en que de verdad se
+  // ejecuta (al vencer el debounce o al perder el foco), así que
+  // siempre guarda lo último tecleado sin necesidad de rearmarla en
+  // cada tecla.
+  function wireDebouncedInput(input, key, commitFn) {
+    input.dataset.gymFocusKey = key;
+    input.addEventListener("input", () => debouncedCommit(key, commitFn));
+    input.addEventListener("blur", () => flushPending(key));
+  }
+
+  function fieldKey(...parts) {
+    return parts.join(":");
+  }
+
+  function captureFocus(container) {
+    const active = document.activeElement;
+    if (!active || !container.contains(active)) return null;
+    const key = active.dataset && active.dataset.gymFocusKey;
+    if (!key) return null;
+    return {
+      key,
+      value: "value" in active ? active.value : undefined,
+      selectionStart: typeof active.selectionStart === "number" ? active.selectionStart : null,
+      selectionEnd: typeof active.selectionEnd === "number" ? active.selectionEnd : null,
+    };
+  }
+
+  function restoreFocus(container, snapshot) {
+    if (!snapshot) return;
+    const match = container.querySelector(`[data-gym-focus-key="${snapshot.key}"]`);
+    if (!match) return;
+    // Lo que se estaba tecleando manda sobre lo que haya traído el
+    // redibujado (p. ej. un dato remoto distinto): el usuario sigue
+    // viendo exactamente lo que ya había escrito, no se le borra nada.
+    if (snapshot.value !== undefined && match.value !== snapshot.value) match.value = snapshot.value;
+    match.focus({ preventScroll: true });
+    if (snapshot.selectionStart !== null && typeof match.setSelectionRange === "function") {
+      try {
+        match.setSelectionRange(snapshot.selectionStart, snapshot.selectionEnd);
+      } catch (e) {
+        /* algunos tipos de input no soportan selectionRange; no es grave */
+      }
+    }
+  }
+
   function el(tag, attrs, ...children) {
     const node = document.createElement(tag);
     Object.entries(attrs || {}).forEach(([k, v]) => {
@@ -75,10 +174,6 @@ window.Agenda = window.Agenda || {};
     render(containerRef);
   }
 
-  function unitLabel(unit) {
-    return state.GYM_SET_UNITS[unit] || unit;
-  }
-
   function buildRulesCard(meta) {
     if (!meta.rules && !meta.progression) return null;
     const card = el("div", { class: "card gym-rules-card" }, el("h3", null, "Reglas"));
@@ -105,11 +200,12 @@ window.Agenda = window.Agenda || {};
       placeholder: "Peso",
       value: set.weight === null || set.weight === undefined ? "" : String(set.weight),
       disabled: set.unit === "bodyweight" || set.unit === "none" ? "disabled" : null,
-      oninput: (e) => {
-        const val = e.target.value;
-        state.updateGymSet(blockNumber, week, day, exercise.id, set.id, { weight: val === "" ? null : Number(val) });
-      },
     });
+    wireDebouncedInput(weightInput, fieldKey(blockNumber, week, day, exercise.id, set.id, "weight"), () => {
+      const val = weightInput.value;
+      state.updateGymSet(blockNumber, week, day, exercise.id, set.id, { weight: val === "" ? null : Number(val) });
+    });
+
     const unitSelect = el("select", {
       class: "gym-set-unit",
       onchange: (e) => {
@@ -122,42 +218,51 @@ window.Agenda = window.Agenda || {};
     });
     unitSelect.value = set.unit;
 
-    const barInput =
-      set.unit === "perSideBar"
-        ? el("input", {
-            type: "number",
-            step: "0.5",
-            inputmode: "decimal",
-            class: "gym-set-bar",
-            placeholder: "Barra (kg)",
-            value: set.barWeight === null || set.barWeight === undefined ? "" : String(set.barWeight),
-            oninput: (e) => {
-              const val = e.target.value;
-              state.updateGymSet(blockNumber, week, day, exercise.id, set.id, { barWeight: val === "" ? null : Number(val) });
-            },
-          })
-        : null;
+    let barInput = null;
+    if (set.unit === "perSideBar") {
+      barInput = el("input", {
+        type: "number",
+        step: "0.5",
+        inputmode: "decimal",
+        class: "gym-set-bar",
+        placeholder: "Barra (kg)",
+        value: set.barWeight === null || set.barWeight === undefined ? "" : String(set.barWeight),
+      });
+      wireDebouncedInput(barInput, fieldKey(blockNumber, week, day, exercise.id, set.id, "barWeight"), () => {
+        const val = barInput.value;
+        state.updateGymSet(blockNumber, week, day, exercise.id, set.id, { barWeight: val === "" ? null : Number(val) });
+      });
+    }
 
     const repsInput = el("input", {
       type: "text",
+      inputmode: "numeric",
       class: "gym-set-reps",
       placeholder: "Reps",
       value: set.reps || "",
-      oninput: (e) => state.updateGymSet(blockNumber, week, day, exercise.id, set.id, { reps: e.target.value }),
     });
+    wireDebouncedInput(repsInput, fieldKey(blockNumber, week, day, exercise.id, set.id, "reps"), () => {
+      state.updateGymSet(blockNumber, week, day, exercise.id, set.id, { reps: repsInput.value });
+    });
+
     const rirInput = el("input", {
       type: "text",
       class: "gym-set-rir",
       placeholder: "RIR",
       value: set.rir || "",
-      oninput: (e) => state.updateGymSet(blockNumber, week, day, exercise.id, set.id, { rir: e.target.value }),
     });
+    wireDebouncedInput(rirInput, fieldKey(blockNumber, week, day, exercise.id, set.id, "rir"), () => {
+      state.updateGymSet(blockNumber, week, day, exercise.id, set.id, { rir: rirInput.value });
+    });
+
     const noteInput = el("input", {
       type: "text",
       class: "gym-set-note add-input",
       placeholder: "Nota (opcional)",
       value: set.note || "",
-      oninput: (e) => state.updateGymSet(blockNumber, week, day, exercise.id, set.id, { note: e.target.value }),
+    });
+    wireDebouncedInput(noteInput, fieldKey(blockNumber, week, day, exercise.id, set.id, "note"), () => {
+      state.updateGymSet(blockNumber, week, day, exercise.id, set.id, { note: noteInput.value });
     });
 
     return el(
@@ -278,15 +383,16 @@ window.Agenda = window.Agenda || {};
           el("span", null, "Hecho")
         )
       );
-      body.appendChild(
-        el("input", {
-          type: "text",
-          class: "add-input gym-exercise-note-input",
-          placeholder: "Nota (opcional)...",
-          value: log.note || "",
-          oninput: (e) => state.setGymExerciseNote(blockNumber, week, day, exercise.id, e.target.value),
-        })
-      );
+      const simpleNoteInput = el("input", {
+        type: "text",
+        class: "add-input gym-exercise-note-input",
+        placeholder: "Nota (opcional)...",
+        value: log.note || "",
+      });
+      wireDebouncedInput(simpleNoteInput, fieldKey(blockNumber, week, day, exercise.id, "note"), () => {
+        state.setGymExerciseNote(blockNumber, week, day, exercise.id, simpleNoteInput.value);
+      });
+      body.appendChild(simpleNoteInput);
     } else {
       log.sets.forEach((set) => {
         body.appendChild(buildSetRow(blockNumber, week, day, exercise, set));
@@ -305,15 +411,16 @@ window.Agenda = window.Agenda || {};
             : null
         )
       );
-      body.appendChild(
-        el("input", {
-          type: "text",
-          class: "add-input gym-exercise-note-input",
-          placeholder: "Nota del ejercicio (opcional)...",
-          value: log.note || "",
-          oninput: (e) => state.setGymExerciseNote(blockNumber, week, day, exercise.id, e.target.value),
-        })
-      );
+      const setsNoteInput = el("input", {
+        type: "text",
+        class: "add-input gym-exercise-note-input",
+        placeholder: "Nota del ejercicio (opcional)...",
+        value: log.note || "",
+      });
+      wireDebouncedInput(setsNoteInput, fieldKey(blockNumber, week, day, exercise.id, "note"), () => {
+        state.setGymExerciseNote(blockNumber, week, day, exercise.id, setsNoteInput.value);
+      });
+      body.appendChild(setsNoteInput);
     }
 
     return el("div", { class: "card gym-exercise-card" }, head, reference, body);
@@ -382,9 +489,11 @@ window.Agenda = window.Agenda || {};
       class: "block-textarea gym-day-note",
       rows: "2",
       placeholder: "Nota del día (opcional)...",
-      oninput: (e) => state.setGymDayNote(blockNumber, week, day, e.target.value),
     });
     dayNoteInput.value = weekLog.dayNote || "";
+    wireDebouncedInput(dayNoteInput, fieldKey(blockNumber, week, day, "dayNote"), () => {
+      state.setGymDayNote(blockNumber, week, day, dayNoteInput.value);
+    });
     card.appendChild(dayNoteInput);
 
     const exercises = state.getGymRoutineDay(blockNumber, day);
@@ -470,8 +579,20 @@ window.Agenda = window.Agenda || {};
       containerRef = container;
       render(container);
     },
+    // Único punto por el que puede llegar un redibujado MIENTRAS se
+    // está tecleando (ver state.onChange en js/app.js): un cambio
+    // remoto de Firebase que trae datos nuevos (state.replaceAllData,
+    // que sí llama a notify()), o cualquier otra mutación en otra
+    // parte de la app que dispare notify() mientras esta pestaña está
+    // activa. Las propias teclas de esta pestaña ya no pasan por acá
+    // (ver wireDebouncedInput/persist() en js/state.js), pero por si
+    // acaso: conserva el foco, el cursor y el texto ya tecleado del
+    // campo activo después de redibujar.
     refresh() {
-      if (containerRef) render(containerRef);
+      if (!containerRef) return;
+      const snapshot = captureFocus(containerRef);
+      render(containerRef);
+      restoreFocus(containerRef, snapshot);
     },
     // Abre directamente una sesión puntual (ver js/app.js:
     // openGymSession, llamado desde "Registrar" en Diaria/Semanal).
