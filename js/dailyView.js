@@ -116,6 +116,25 @@ window.Agenda = window.Agenda || {};
 
   const OFFICE_BLOCK_IDS = ["oficina_manana", "tarde_oficina"];
 
+  // Casilla de cumplido a nivel de bloque (la del encabezado, junto al
+  // horario): se quitó de todos los bloques salvo donde alimenta un
+  // contador/racha que no tiene ningún otro origen de datos —
+  // "correr" (racha de corrida + contador del 10K, ver getRunStreak) y
+  // el bloque de meta genérica de cuentas de onboarding (ver
+  // js/userGoal.js: BLOCK_ID — getGoalStreak depende de exactamente
+  // esta misma casilla, igual que la corrida). El gimnasio no entra
+  // acá porque ya tiene su propio control "¿Entrenaste hoy?"/
+  // "Corregir" (ver block.gymStatus/buildGymExtras), nunca esta
+  // casilla genérica. Los bloques excluidos (Meditar/leer, Oficina,
+  // Comida, Comer/lavar platos y bloque personal, Cena y bañarme,
+  // Bloque libre, Mañana/Tarde/Noche del fin de semana, bloques
+  // personales configurados) conservan su dato guardado (day.blocks[
+  // id].done) intacto en data — solo dejan de mostrarse y de poder
+  // tocarse desde acá.
+  function blockHasHeaderCheck(block) {
+    return !block.gymStatus && (block.id === "correr" || block.id === ns.userGoal.BLOCK_ID);
+  }
+
   // Las opciones (qué bloques de oficina hay y a qué hora) se leen en
   // vivo del horario real de la cuenta (state.getOfficeBlockOptions),
   // no de una lista fija: una franja o dos, con sus horas propias.
@@ -797,9 +816,8 @@ window.Agenda = window.Agenda || {};
         block.time ? el("span", { class: "schedule-time" }, block.time) : null,
         el("span", { class: "schedule-label" }, block.label),
         collapsedGymIndicator,
-        block.gymStatus
-          ? null
-          : el("input", {
+        blockHasHeaderCheck(block)
+          ? el("input", {
               type: "checkbox",
               class: "schedule-check",
               checked: block.done ? "checked" : null,
@@ -809,7 +827,8 @@ window.Agenda = window.Agenda || {};
               // cumplido — un solo toque no debería hacer las dos cosas.
               onclick: (e) => e.stopPropagation(),
               onchange: () => state.toggleBlockDone(dateStr, block.id),
-            }),
+            })
+          : null,
       );
 
       const body = el(
