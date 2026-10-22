@@ -1429,10 +1429,37 @@ h2, h3, h4 {
   pointer-events: none;
   transition: opacity 0.25s ease;
   z-index: 70;
+  max-width: calc(100vw - 2rem);
+  text-align: center;
+  box-sizing: border-box;
 }
 
 .quick-capture-toast.show {
   opacity: 1;
+}
+
+/* Variante con "Deshacer" (captura rápida desde la Diaria, ver
+   js/quickCapture.js: showUndoToast) — a diferencia del toast simple
+   de siempre, esta sí necesita recibir toques. */
+.quick-capture-toast.has-action {
+  pointer-events: auto;
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.2rem;
+}
+
+.quick-capture-toast-undo {
+  background: transparent;
+  border: none;
+  color: var(--bg);
+  font-family: var(--font-sans);
+  font-size: 0.85rem;
+  font-weight: 700;
+  text-decoration: underline;
+  cursor: pointer;
+  padding: 0.1rem 0.15rem;
 }
 
 /* ---------- Navegación inferior en mobile (ver index.html: nav.bottom-nav) ---------- */

@@ -2056,18 +2056,25 @@ window.Agenda = window.Agenda || {};
     return getWeek(mondayStr).pendientesTrabajo;
   }
 
+  // Devuelve el id del pendiente creado (ver js/quickCapture.js: lo
+  // necesita para poder deshacer la captura rápida desde la Diaria sin
+  // tener que volver a buscarlo por texto/fecha). Nadie más usaba el
+  // valor de retorno antes de esto, así que agregarlo no cambia nada
+  // para los llamadores existentes.
   function addWeekTrabajoPendiente(mondayStr, text, dayKeys, blockId) {
     const trimmed = text.trim();
-    if (!trimmed) return;
+    if (!trimmed) return null;
     const keys = Array.isArray(dayKeys) ? dayKeys.filter(Boolean) : dayKeys ? [dayKeys] : [];
-    getWeek(mondayStr).pendientesTrabajo.push({
+    const item = {
       id: uid("wt"),
       text: trimmed,
       done: false,
       dayKeys: keys,
       blockId: OFFICE_BLOCK_IDS.includes(blockId) ? blockId : DEFAULT_OFFICE_BLOCK_ID,
-    });
+    };
+    getWeek(mondayStr).pendientesTrabajo.push(item);
     notify();
+    return item.id;
   }
 
   function removeWeekTrabajoPendiente(mondayStr, id) {
@@ -2269,7 +2276,7 @@ window.Agenda = window.Agenda || {};
   }
 
   function addOfficePendienteForDate(dateStr, text, blockId) {
-    addWeekTrabajoPendiente(getMondayKey(dateStr), text, [getWeekdayKey(dateStr)], blockId);
+    return addWeekTrabajoPendiente(getMondayKey(dateStr), text, [getWeekdayKey(dateStr)], blockId);
   }
 
   // "Quitar" acá solo desasigna el día que se está viendo (el mismo

@@ -20,6 +20,14 @@ window.Agenda = window.Agenda || {};
     views[activeTab].refresh();
   }
 
+  // Para que otras capas (ver js/quickCapture.js: el botón flotante "+"
+  // se comporta distinto solo en la Diaria) sepan en qué pestaña está
+  // el usuario ahora mismo, sin tener que llevar su propio seguimiento
+  // de pestañas por separado.
+  function getActiveTab() {
+    return activeTab;
+  }
+
   function switchTab(tab) {
     activeTab = tab;
     document.querySelectorAll(".tab-button").forEach((b) => b.classList.toggle("active", b.dataset.tab === activeTab));
@@ -135,6 +143,7 @@ window.Agenda = window.Agenda || {};
   // cuenta, sin tener que conocer el mecanismo de pestañas.
   ns.app = {
     refreshActive: () => refreshActive(),
+    getActiveTab,
     startParadaCapture,
     getParadaCaptureSession,
     endParadaCapture,
