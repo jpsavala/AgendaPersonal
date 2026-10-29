@@ -31,7 +31,25 @@ window.Agenda = window.Agenda || {};
   function switchTab(tab) {
     activeTab = tab;
     document.querySelectorAll(".tab-button").forEach((b) => b.classList.toggle("active", b.dataset.tab === activeTab));
+    ns.state.setActiveTab(tab);
     mountActive();
+  }
+
+  // Recordar la pestaña (ver js/state.js: getGymUiState/setActiveTab): al
+  // abrir la app, si la última pestaña fue Gimnasio y pasaron menos de 3
+  // horas, se arranca ahí directo en vez de en la Diaria de siempre. Se
+  // pone activeTab a mano (no con switchTab) para no pisar lastTabAt con
+  // "ahora" antes de que mountActive/gymView.mount lean la posición
+  // guardada.
+  const TAB_MEMORY_WINDOW_MS = 3 * 60 * 60 * 1000;
+
+  function restoreActiveTabOnColdStart() {
+    const uiState = ns.state.getGymUiState && ns.state.getGymUiState();
+    if (!uiState || uiState.lastTab !== "gimnasio" || !uiState.lastTabAt) return;
+    if (Date.now() - uiState.lastTabAt < TAB_MEMORY_WINDOW_MS) {
+      activeTab = "gimnasio";
+      document.querySelectorAll(".tab-button").forEach((b) => b.classList.toggle("active", b.dataset.tab === activeTab));
+    }
   }
 
   // ---------- Captura de paradas desde "¿Habrá paradas antes de la
@@ -134,6 +152,7 @@ window.Agenda = window.Agenda || {};
     viewContainer = document.getElementById("view-container");
     setupTabs();
     setupParadaCaptureBackBtn();
+    restoreActiveTabOnColdStart();
     mountActive();
     ns.state.onChange(refreshActive);
   });

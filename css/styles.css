@@ -1712,6 +1712,33 @@ h2, h3, h4 {
   color: var(--text-muted);
 }
 
+/* Resumen de un ejercicio colapsado porque ya quedó completo (ver
+   js/gymView.js: isExerciseComplete/exerciseSummaryLine). */
+.gym-exercise-summary {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  margin: 0.3rem 0 0;
+}
+
+/* Recordar dónde quedé (ver js/gymView.js: pendingScrollExerciseId): al
+   volver a Gimnasio dentro de la ventana de 3h, el ejercicio donde
+   capturé algo por última vez recibe scroll automático + este resalte
+   temporal, igual de patrón que .trabajo-section.parada-capture-highlight. */
+@keyframes gym-exercise-pulse {
+  from {
+    background: color-mix(in srgb, var(--accent-gold) 20%, var(--surface));
+    box-shadow: 0 0 0 2px var(--accent-gold);
+  }
+  to {
+    background: var(--surface);
+    box-shadow: 0 0 0 0 transparent;
+  }
+}
+
+.gym-exercise-card.gym-exercise-highlight {
+  animation: gym-exercise-pulse 2.5s ease-out forwards;
+}
+
 .gym-exercise-prev {
   font-size: 0.8rem;
   color: var(--accent-green-light);

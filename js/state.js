@@ -724,6 +724,57 @@ window.Agenda = window.Agenda || {};
     return { blockNumber: r.blockNumber, week: Math.floor(r.index / 5) + 1, day: r.dayNumber };
   }
 
+  // ---------- Recordar dónde quedé en Gimnasio (y qué pestaña) ----------
+  // Puramente de interfaz: en qué pestaña estaba, y en qué bloque/
+  // semana/día/ejercicio de Gimnasio — nunca contenido (pesos, reps,
+  // notas), nunca la cola + puntero. Vive en data.gymUiState, así que
+  // sincroniza con el resto de los datos de la cuenta con el mismo "el
+  // más reciente gana" de siempre (ver js/firebaseSync.js), sin nada
+  // especial — funciona igual entre iPad y iPhone.
+  //
+  // Dos relojes independientes, cada uno con su propia ventana de
+  // "hace cuánto": lastTabAt (¿seguía en Gimnasio hace poco?, ver
+  // js/app.js) y positionAt (¿en qué bloque/semana/día/ejercicio,
+  // hace poco?, ver js/gymView.js) — cambiar de pestaña no debe
+  // "refrescar" la antigüedad de la posición, ni al revés.
+  function getGymUiState() {
+    return data.gymUiState || null;
+  }
+
+  function setActiveTab(tab) {
+    data.gymUiState = { ...(data.gymUiState || {}), lastTab: tab, lastTabAt: Date.now() };
+    persist();
+  }
+
+  // Cambié de bloque/semana/día a mano (sin tocar un ejercicio en
+  // particular todavía): se guarda como la posición, y se limpia el
+  // ejercicio recordado (ya no aplica a este nuevo lugar).
+  function touchGymPosition(blockNumber, week, day) {
+    data.gymUiState = {
+      ...(data.gymUiState || {}),
+      blockNumber,
+      week,
+      day,
+      exerciseId: null,
+      positionAt: Date.now(),
+    };
+    persist();
+  }
+
+  // Capturé algo (peso/reps/RIR/nota/serie/hecho) en este ejercicio
+  // puntual: queda como la posición Y el ejercicio a recordar.
+  function touchGymExercise(blockNumber, week, day, exerciseId) {
+    data.gymUiState = {
+      ...(data.gymUiState || {}),
+      blockNumber,
+      week,
+      day,
+      exerciseId,
+      positionAt: Date.now(),
+    };
+    persist();
+  }
+
   function getGymRoutineDay(blockNumber, day) {
     const block = data.gymBlocks && data.gymBlocks[blockNumber];
     if (!block || !block.routine) return [];
@@ -768,14 +819,14 @@ window.Agenda = window.Agenda || {};
     if (!block.weeks[week]) block.weeks[week] = {};
     if (!block.weeks[week][day]) block.weeks[week][day] = { dayNote: "", exercises: {} };
     block.weeks[week][day].dayNote = text;
-    persist();
+    touchGymPosition(blockNumber, week, day); // ya hace persist()
   }
 
   function setGymExerciseNote(blockNumber, week, day, exerciseId, text) {
     const log = ensureGymExerciseLog(blockNumber, week, day, exerciseId);
     if (!log) return;
     log.note = text;
-    persist();
+    touchGymExercise(blockNumber, week, day, exerciseId); // ya hace persist()
   }
 
   function blankGymSet() {
@@ -786,6 +837,7 @@ window.Agenda = window.Agenda || {};
     const log = ensureGymExerciseLog(blockNumber, week, day, exerciseId);
     if (!log) return;
     log.sets.push(blankGymSet());
+    touchGymExercise(blockNumber, week, day, exerciseId);
     notify();
   }
 
@@ -805,6 +857,7 @@ window.Agenda = window.Agenda || {};
       rir: last ? last.rir : "",
       note: "",
     });
+    touchGymExercise(blockNumber, week, day, exerciseId);
     notify();
   }
 
@@ -817,13 +870,14 @@ window.Agenda = window.Agenda || {};
     const set = log.sets.find((s) => s.id === setId);
     if (!set) return;
     Object.assign(set, fields);
-    persist();
+    touchGymExercise(blockNumber, week, day, exerciseId); // ya hace persist()
   }
 
   function removeGymSet(blockNumber, week, day, exerciseId, setId) {
     const log = ensureGymExerciseLog(blockNumber, week, day, exerciseId);
     if (!log) return;
     log.sets = log.sets.filter((s) => s.id !== setId);
+    touchGymExercise(blockNumber, week, day, exerciseId);
     notify();
   }
 
@@ -835,6 +889,7 @@ window.Agenda = window.Agenda || {};
     const log = ensureGymExerciseLog(blockNumber, week, day, exerciseId);
     if (!log) return;
     log.done = done;
+    touchGymExercise(blockNumber, week, day, exerciseId);
     notify();
   }
 
@@ -2548,6 +2603,10 @@ window.Agenda = window.Agenda || {};
     getGymBlockNumbers,
     getGymBlockMeta,
     getGymSessionLocation,
+    getGymUiState,
+    setActiveTab,
+    touchGymPosition,
+    touchGymExercise,
     getGymRoutineDay,
     getGymWeekDay,
     setGymDayNote,

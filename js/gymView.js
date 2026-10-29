@@ -12,6 +12,29 @@ window.Agenda = window.Agenda || {};
   let currentBlockNumber = null;
   let currentWeek = null;
   let defaultsApplied = false;
+  const THREE_HOURS_MS = 3 * 60 * 60 * 1000;
+  // positionAt (ver state.getGymUiState) ya aplicado como restauración
+  // rica (posición + ejercicio + scroll/colapso) — evita repetir el
+  // scroll/resaltado en cada re-render mientras se sigue trabajando en
+  // la MISMA posición recordada (ver syncPositionOnMount, solo se llama
+  // una vez por cada vez que se entra a la pestaña, no en cada acción).
+  let lastHandledPositionAt = null;
+  // Ejercicio al que hay que hacer scroll en el próximo render (una
+  // sola vez; se limpia apenas se usa, ver el final de render()).
+  let pendingScrollExerciseId = null;
+  // El resaltado en sí NO se aplica tocando el DOM desde afuera (a
+  // diferencia del scroll): si algo redibuja esta pestaña poco después
+  // de montarla (p. ej. una sincronización de Firebase que llega
+  // después del mount, con datos propios — nunca con el contenido que
+  // el usuario tecleó, ver notify()/replaceAllData), ese redibujado
+  // reconstruye todas las tarjetas desde cero y un class.add puntual se
+  // perdería con la tarjeta vieja. Por eso buildExerciseCard decide la
+  // clase de resaltado leyendo estas dos variables en cada construcción
+  // (declarativo), así sobrevive a cualquier cantidad de redibujados
+  // mientras dure la ventana — y al cabo de highlightUntil, deja de
+  // aplicarse sola (la animación CSS además ya termina sola a los 2.5s).
+  let highlightExerciseId = null;
+  let highlightUntil = 0;
   // Día (o nada) forzado a expandirse en la semana/bloque actuales, por
   // fuera de la regla de "la sesión de hoy abierta por defecto" — se
   // limpia cada vez que se cambia de semana o de bloque (ver
@@ -172,6 +195,118 @@ window.Agenda = window.Agenda || {};
     if (collapsedExerciseIds.has(exerciseId)) collapsedExerciseIds.delete(exerciseId);
     else collapsedExerciseIds.add(exerciseId);
     render(containerRef);
+  }
+
+  // "Terminado" = tiene todas sus series con datos (peso cuando
+  // corresponde + reps) en modo series, o la casilla "hecho" marcada en
+  // modo simple — ver el pedido original, parte 3. Uno a medio llenar
+  // NUNCA se da por terminado (no se colapsa solo).
+  function isExerciseComplete(blockNumber, week, day, exercise) {
+    const log = state.getGymWeekDay(blockNumber, week, day).exercises[exercise.id];
+    if (!log) return false;
+    if (exercise.mode === "simple") return !!log.done;
+    if (!log.sets || !log.sets.length) return false;
+    return log.sets.every((s) => {
+      const hasReps = !!(s.reps && String(s.reps).trim());
+      const needsWeight = s.unit !== "bodyweight" && s.unit !== "none";
+      const hasWeight = !needsWeight || (s.weight !== null && s.weight !== undefined && s.weight !== "");
+      return hasReps && hasWeight;
+    });
+  }
+
+  function formatSetWeightLabel(set) {
+    if (set.unit === "bodyweight") return "Peso corporal";
+    if (set.unit === "none" || set.weight === null || set.weight === undefined) return "Sin peso";
+    if (set.unit === "perSide") return `${set.weight} lb/lado`;
+    if (set.unit === "perSideBar") return `${set.weight} lb/lado + barra${set.barWeight ? ` ${set.barWeight} kg` : ""}`;
+    return `${set.weight} lb`;
+  }
+
+  // Resumen de una línea para un ejercicio colapsado por "terminado" —
+  // ver el pedido original: 'ej. "Hip Thrust: 250 lb x 12 @ 0 RIR, 3
+  // series"'.
+  function exerciseSummaryLine(blockNumber, week, day, exercise) {
+    const log = state.getGymWeekDay(blockNumber, week, day).exercises[exercise.id];
+    if (!log) return "";
+    if (exercise.mode === "simple") return log.note ? log.note : "Hecho";
+    if (!log.sets || !log.sets.length) return "";
+    const first = log.sets[0];
+    const rir = first.rir ? ` @ ${first.rir} RIR` : "";
+    const plural = log.sets.length === 1 ? "serie" : "series";
+    return `${formatSetWeightLabel(first)} x ${first.reps || "?"}${rir}, ${log.sets.length} ${plural}`;
+  }
+
+  // Ejercicios antes del recordado (en el orden de la rutina de ese
+  // día) que ya están terminados: arrancan colapsados, con su resumen
+  // en vez de las series — ver el pedido original, parte 3. El
+  // ejercicio recordado y los siguientes quedan abiertos.
+  function computeInitialCollapse(blockNumber, week, day, exerciseId) {
+    const exercises = state.getGymRoutineDay(blockNumber, day);
+    const idx = exercises.findIndex((e) => e.id === exerciseId);
+    const collapsed = new Set();
+    if (idx === -1) return collapsed;
+    for (let i = 0; i < idx; i += 1) {
+      if (isExerciseComplete(blockNumber, week, day, exercises[i])) collapsed.add(exercises[i].id);
+    }
+    return collapsed;
+  }
+
+  // Se llama una vez cada vez que se ENTRA a la pestaña (ver mount(),
+  // nunca desde render() a secas: si no, cada tecla/acción dentro de la
+  // misma sesión volvería a disparar el scroll/resaltado). Decide la
+  // posición (bloque/semana/día/ejercicio) con la que arranca esta
+  // visita:
+  // - Si hay una posición guardada (ver state.getGymUiState) de menos
+  //   de 3 horas, la restaura (y, si trae un ejercicio, programa el
+  //   scroll + colapsa los terminados de antes — ver
+  //   computeInitialCollapse) — pero solo la primera vez que se ve ESA
+  //   posición puntual (lastHandledPositionAt), para no repetir el
+  //   scroll si se vuelve a esta misma pestaña sin que haya nada nuevo
+  //   que recordar.
+  // - Si no (nada guardado, o pasaron más de 3 horas), refleja la
+  //   sesión que le toca a HOY según la cola + puntero — nunca se queda
+  //   pegada a una semana vieja por inercia (ver el bug reportado).
+  function syncPositionOnMount() {
+    const blockNumbers = state.getGymBlockNumbers();
+    if (!blockNumbers.length) {
+      defaultsApplied = true;
+      return;
+    }
+
+    const uiState = state.getGymUiState();
+    const fresh = !!(
+      uiState &&
+      uiState.positionAt &&
+      Date.now() - uiState.positionAt < THREE_HOURS_MS &&
+      blockNumbers.includes(uiState.blockNumber)
+    );
+
+    if (fresh && uiState.positionAt !== lastHandledPositionAt) {
+      lastHandledPositionAt = uiState.positionAt;
+      currentBlockNumber = uiState.blockNumber;
+      currentWeek = uiState.week;
+      dayExpansionOverride = { [uiState.day]: true };
+      collapsedExerciseIds = uiState.exerciseId
+        ? computeInitialCollapse(uiState.blockNumber, uiState.week, uiState.day, uiState.exerciseId)
+        : new Set();
+      pendingScrollExerciseId = uiState.exerciseId || null;
+      highlightExerciseId = uiState.exerciseId || null;
+      highlightUntil = uiState.exerciseId ? Date.now() + 2500 : 0;
+    } else if (!fresh) {
+      const todayLocation = state.getGymSessionLocation(todayStr());
+      const todayBlock = (todayLocation && todayLocation.blockNumber) || blockNumbers[blockNumbers.length - 1];
+      const todayWeek = (todayLocation && todayLocation.blockNumber === todayBlock && todayLocation.week) || 1;
+      if (!defaultsApplied || currentBlockNumber !== todayBlock || currentWeek !== todayWeek) {
+        currentBlockNumber = todayBlock;
+        currentWeek = todayWeek;
+        dayExpansionOverride = {};
+        collapsedExerciseIds = new Set();
+      }
+    }
+
+    defaultsApplied = true;
+    if (!blockNumbers.includes(currentBlockNumber)) currentBlockNumber = blockNumbers[blockNumbers.length - 1];
+    if (!currentWeek) currentWeek = 1;
   }
 
   function buildRulesCard(meta) {
@@ -361,11 +496,27 @@ window.Agenda = window.Agenda || {};
     );
 
     if (editingExercise && editingExercise.day === day && editingExercise.id === exercise.id) {
-      return el("div", { class: "card gym-exercise-card" }, head, reference, buildExerciseEditForm(blockNumber, day, exercise));
+      return el(
+        "div",
+        { class: "card gym-exercise-card", "data-gym-exercise-card": exercise.id },
+        head,
+        reference,
+        buildExerciseEditForm(blockNumber, day, exercise)
+      );
     }
 
     if (!expanded) {
-      return el("div", { class: "card gym-exercise-card collapsed" }, head, reference);
+      // Colapsado por "terminado" (ver computeInitialCollapse): una
+      // línea de resumen en vez de dejarlo en blanco, para saber qué se
+      // hizo sin tener que volver a abrirlo.
+      const summary = isExerciseComplete(blockNumber, week, day, exercise) ? exerciseSummaryLine(blockNumber, week, day, exercise) : "";
+      return el(
+        "div",
+        { class: "card gym-exercise-card collapsed", "data-gym-exercise-card": exercise.id },
+        head,
+        reference,
+        summary ? el("p", { class: "gym-exercise-summary" }, summary) : null
+      );
     }
 
     const body = el("div", { class: "gym-exercise-body" });
@@ -423,7 +574,14 @@ window.Agenda = window.Agenda || {};
       body.appendChild(setsNoteInput);
     }
 
-    return el("div", { class: "card gym-exercise-card" }, head, reference, body);
+    const highlighted = highlightExerciseId === exercise.id && Date.now() < highlightUntil;
+    return el(
+      "div",
+      { class: "card gym-exercise-card" + (highlighted ? " gym-exercise-highlight" : ""), "data-gym-exercise-card": exercise.id },
+      head,
+      reference,
+      body
+    );
   }
 
   function buildAddExerciseForm(blockNumber, day) {
@@ -473,7 +631,12 @@ window.Agenda = window.Agenda || {};
       {
         class: "gym-day-head",
         onclick: () => {
-          dayExpansionOverride[day] = !expanded;
+          const willExpand = !expanded;
+          dayExpansionOverride[day] = willExpand;
+          // "Si cambio de... día a mano, eso pasa a ser lo recordado"
+          // (ver el pedido original, parte 2): solo al abrir un día a
+          // mano, no al cerrarlo.
+          if (willExpand) state.touchGymPosition(blockNumber, week, day);
           render(containerRef);
         },
       },
@@ -526,16 +689,15 @@ window.Agenda = window.Agenda || {};
       return;
     }
 
-    const today = todayStr();
-    const todayLocation = state.getGymSessionLocation(today);
-
-    if (!defaultsApplied) {
-      defaultsApplied = true;
-      currentBlockNumber = (todayLocation && todayLocation.blockNumber) || blockNumbers[blockNumbers.length - 1];
-      currentWeek = (todayLocation && todayLocation.blockNumber === currentBlockNumber && todayLocation.week) || 1;
-    }
+    // La posición (bloque/semana/día/ejercicio) ya la decidió
+    // syncPositionOnMount (ver mount()) o una acción puntual (setBlock/
+    // setWeek/toggleExercise/openSession) — acá solo queda la red de
+    // seguridad de siempre por si algo dejó un valor fuera de rango.
     if (!blockNumbers.includes(currentBlockNumber)) currentBlockNumber = blockNumbers[blockNumbers.length - 1];
     if (!currentWeek) currentWeek = 1;
+
+    const today = todayStr();
+    const todayLocation = state.getGymSessionLocation(today);
 
     const meta = state.getGymBlockMeta(currentBlockNumber);
 
@@ -572,11 +734,25 @@ window.Agenda = window.Agenda || {};
     });
 
     container.append(header, weekTabs, rulesCard, daysWrap);
+
+    // Scroll (una sola vez) al ejercicio recordado (ver
+    // syncPositionOnMount) — el resaltado en sí ya lo decide
+    // buildExerciseCard en cada construcción (ver highlightExerciseId/
+    // highlightUntil), así que acá solo falta llevar la vista hasta ahí.
+    if (pendingScrollExerciseId) {
+      const exerciseId = pendingScrollExerciseId;
+      pendingScrollExerciseId = null;
+      requestAnimationFrame(() => {
+        const card = container.querySelector(`[data-gym-exercise-card="${exerciseId}"]`);
+        if (card) card.scrollIntoView({ behavior: "smooth", block: "center" });
+      });
+    }
   }
 
   ns.gymView = {
     mount(container) {
       containerRef = container;
+      syncPositionOnMount();
       render(container);
     },
     // Único punto por el que puede llegar un redibujado MIENTRAS se
@@ -595,12 +771,23 @@ window.Agenda = window.Agenda || {};
       restoreFocus(containerRef, snapshot);
     },
     // Abre directamente una sesión puntual (ver js/app.js:
-    // openGymSession, llamado desde "Registrar" en Diaria/Semanal).
+    // openGymSession, llamado desde "Registrar" en Diaria/Semanal) —
+    // tiene prioridad sobre lo recordado: deja la posición elegida acá
+    // como la nueva recordada (ver state.touchGymPosition) y marca ese
+    // mismo instante como ya "atendido" (lastHandledPositionAt), para
+    // que el mount() que sigue (switchTab hacia Gimnasio, ver
+    // js/app.js) no la vuelva a pisar con syncPositionOnMount.
     openSession({ blockNumber, week, day }) {
       currentBlockNumber = blockNumber;
       currentWeek = week;
       defaultsApplied = true;
       dayExpansionOverride = { [day]: true };
+      collapsedExerciseIds = new Set();
+      pendingScrollExerciseId = null;
+      highlightExerciseId = null;
+      state.touchGymPosition(blockNumber, week, day);
+      const uiState = state.getGymUiState();
+      lastHandledPositionAt = uiState && uiState.positionAt;
       if (containerRef) render(containerRef);
     },
   };
