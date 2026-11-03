@@ -140,6 +140,12 @@ window.Agenda = window.Agenda || {};
       toastTimer = setTimeout(() => toast.classList.remove("show"), 6000);
     }
 
+    // Expuestas para que otras vistas reutilicen el mismo toast (p. ej.
+    // js/weeklyView.js: el botón "Cumplido" del panel "Pendientes no
+    // cumplidos de la semana anterior") en vez de duplicar su propio
+    // mecanismo de aviso + "Deshacer".
+    Object.assign(ns.quickCapture, { showToast, showUndoToast });
+
     // Captura desde la Diaria: crea directamente el pendiente de
     // "Prioridades del trabajo" (ver el comentario de arriba del
     // archivo) y avisa dónde quedó, con "Deshacer" por unos segundos.

@@ -599,6 +599,23 @@ window.Agenda = window.Agenda || {};
     // pendiente (no lo duplica): lo saca de la semana vieja y lo agrega
     // acá con el día/bloque nuevos y la casilla sin marcar de nuevo.
     const { previousMonday, items: unfinishedItems } = state.getUnfinishedPendientesFromPreviousWeek(mondayStr);
+
+    // "Cumplido": marca el pendiente directamente en su semana de
+    // origen (ver state.setPendienteDoneInWeek — mismo campo `done` que
+    // su casilla de toda la vida, no lo mueve ni lo copia). El
+    // renglón se desvanece un instante antes de que el redibujado real
+    // lo saque del panel (ver la clase "completing"), y el aviso con
+    // "Deshacer" reutiliza el mismo toast de la captura rápida (ver
+    // js/quickCapture.js) en vez de duplicarlo.
+    const markPendienteComplete = (item, row) => {
+      row.classList.add("completing");
+      setTimeout(() => state.setPendienteDoneInWeek(previousMonday, item.listKey, item.id, true), 200);
+      if (ns.quickCapture && ns.quickCapture.showUndoToast) {
+        ns.quickCapture.showUndoToast("Marcado como cumplido", () => {
+          state.setPendienteDoneInWeek(previousMonday, item.listKey, item.id, false);
+        });
+      }
+    };
     const unfinishedCard = el(
       "div",
       { class: "card" },
@@ -643,11 +660,13 @@ window.Agenda = window.Agenda || {};
             )
           );
         } else {
-          unfinishedList.appendChild(
+          const row = el(
+            "div",
+            { class: "check-row unfinished-row" },
+            el("span", null, item.text),
             el(
               "div",
-              { class: "check-row unfinished-row" },
-              el("span", null, item.text),
+              { class: "unfinished-row-actions" },
               el(
                 "button",
                 {
@@ -658,9 +677,15 @@ window.Agenda = window.Agenda || {};
                   },
                 },
                 "Mover a esta semana"
+              ),
+              el(
+                "button",
+                { class: "btn-primary", onclick: () => markPendienteComplete(item, row) },
+                "Cumplido"
               )
             )
           );
+          unfinishedList.appendChild(row);
         }
       });
       unfinishedCard.appendChild(unfinishedList);
@@ -825,8 +850,16 @@ window.Agenda = window.Agenda || {};
       pendientesCard.appendChild(personalList);
     }
 
+    // Espacio al final de la página (ver css: .fab-bottom-spacer) para
+    // que el botón flotante "+" no tape el último renglón — en mobile
+    // ya hay margen de sobra (la barra inferior + el FAB levantado, ver
+    // media query de .fab), así que ahí no agrega nada de más.
+    const bottomSpacer = el("div", { class: "fab-bottom-spacer" });
+
     container.append(
-      ...[header, runBanner, daysGrid, metaCard, unfinishedCard, pendientesCard, habitsCard, revisionCard].filter(Boolean)
+      ...[header, runBanner, daysGrid, metaCard, unfinishedCard, pendientesCard, habitsCard, revisionCard, bottomSpacer].filter(
+        Boolean
+      )
     );
 
     // Scroll + foco al campo de agregar mientras la captura de paradas

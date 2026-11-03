@@ -2320,6 +2320,27 @@ window.Agenda = window.Agenda || {};
     notify();
   }
 
+  // Botón "Cumplido" del panel "Pendientes no cumplidos de la semana
+  // anterior" (ver js/weeklyView.js) y su "Deshacer": marca (o
+  // desmarca) el pendiente directamente en su semana de ORIGEN
+  // (mondayStr es esa semana vieja, no la que se esté mirando), sin
+  // moverlo ni duplicarlo — es el mismo campo `done` que su casilla de
+  // toda la vida (toggleWeekTrabajoPendiente/toggleWeekPersonalPendiente/
+  // toggleParadaInWeek), así que queda igual de cumplido en su día y
+  // bloque original, en la Diaria y en cualquier resumen. A diferencia
+  // de esas funciones (que alternan), esta fija el valor exacto para
+  // que "Deshacer" pueda devolverlo a no cumplido sin depender del
+  // estado en que lo encuentre.
+  function setPendienteDoneInWeek(mondayStr, listKey, id, done) {
+    if (!PENDIENTE_LIST_KEYS.includes(listKey)) return;
+    const week = data.weeks[mondayStr];
+    if (!week || !Array.isArray(week[listKey])) return;
+    const item = week[listKey].find((p) => p.id === id);
+    if (!item) return;
+    item.done = done;
+    notify();
+  }
+
   // ---------- "Prioridades del trabajo" (vista Diaria) ----------
   // Es la misma lista y el mismo dato que "Pendientes de la semana:
   // Trabajo" de la vista Semanal (pendientesTrabajo), no un sistema
@@ -2676,6 +2697,7 @@ window.Agenda = window.Agenda || {};
     hasUnfinishedParadasToday,
     getUnfinishedPendientesFromPreviousWeek,
     movePendienteToWeek,
+    setPendienteDoneInWeek,
     toggleWeekHabit,
     setRevisionViernes,
     getEvents,

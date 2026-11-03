@@ -892,10 +892,46 @@ h2, h3, h4 {
   border-left: 3px solid var(--accent-gold);
   border-radius: 6px;
   padding: 0.45rem 0.6rem;
+  flex-wrap: wrap;
+  transition: opacity 0.2s ease;
 }
 
 .check-row.unfinished-row.moving {
   flex-wrap: wrap;
+}
+
+/* "Cumplido" (ver js/weeklyView.js: markPendienteComplete): desvanece
+   el renglón un instante antes de que el redibujado real lo saque del
+   panel. */
+.check-row.unfinished-row.completing {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* Agrupa "Mover a esta semana" + "Cumplido" como un solo bloque (mismo
+   criterio que .add-row-actions): si no entran junto al texto del
+   pendiente en la misma línea, pasan juntos a la línea de abajo, y
+   entre ellos se apilan antes de cortarse o superponerse. */
+.unfinished-row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  flex: 0 0 auto;
+  max-width: 100%;
+}
+
+/* Espacio al final de la Semanal para que el FAB "+" (fijo, abajo a la
+   derecha) no quede encima del último renglón de la página — en
+   mobile no hace falta: la barra inferior y el FAB ya levantado (ver
+   @media max-width: 768px más abajo) dejan margen de sobra. */
+.fab-bottom-spacer {
+  height: 0;
+}
+
+@media (min-width: 769px) {
+  .fab-bottom-spacer {
+    height: 4.5rem;
+  }
 }
 
 .pendientes-subtitle {
