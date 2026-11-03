@@ -54,14 +54,35 @@ window.Agenda = window.Agenda || {};
   // sesión de la cola le corresponde, sin modificar nada (lectura pura).
   // null = sin datos para esa fecha (anterior al ancla semilla, o cola
   // ya agotada): el bloque debe comportarse como antes (editable manual).
+  //
+  // El punto de partida de la simulación es LOCAL a esta consulta: la
+  // resolución explícita más reciente que sea <= dateStr (nunca "la
+  // más reciente de toda la cola", que es lo que da anchorOf — eso
+  // sirve para decidir dónde CONTINÚA la cola hacia adelante, no para
+  // leer una fecha puntual del pasado). Si se usara el ancla global,
+  // corregir ("Corregir", ver editResolution) una fecha POSTERIOR sin
+  // haber resuelto antes alguna anterior sin su propia resolución
+  // dejaría a esa fecha anterior devolviendo null para siempre (ver el
+  // bug reportado: el bloque de Gimnasio de un día laboral caía a
+  // campo de texto libre en la Diaria) — con el ancla local, cada
+  // fecha se simula desde lo que de verdad la precede, sin necesidad
+  // de escribir nada de más ni de "fijar" un índice que después
+  // impediría reproyectar lo posterior al corregir una fecha anterior.
   function resolve(queueState, sessions, dateStr, todayStr, isValidDay) {
     const explicit = queueState.resolutions[dateStr];
     if (explicit) {
       return { index: explicit.index, session: sessions[explicit.index], status: explicit.status };
     }
 
-    let idx = queueState.pointer;
-    let cursor = anchorOf(queueState);
+    const priorDates = Object.keys(queueState.resolutions).filter((d) => d <= dateStr && d >= queueState.seedAnchor);
+    let idx = queueState.pointerAtSeed || 0;
+    let cursor = queueState.seedAnchor;
+    if (priorDates.length) {
+      const lastPrior = priorDates.reduce((max, d) => (d > max ? d : max));
+      const lastRes = queueState.resolutions[lastPrior];
+      idx = lastRes.status === "done" ? lastRes.index + 1 : lastRes.index;
+      cursor = toISO(addDays(fromISO(lastPrior), 1));
+    }
     if (cursor > dateStr) return null;
 
     while (idx < sessions.length) {
