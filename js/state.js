@@ -881,11 +881,19 @@ window.Agenda = window.Agenda || {};
     notify();
   }
 
-  // Ejercicios "simple" (sin peso): una sola casilla "hecho" + nota, sin
-  // series. Vive en el mismo exerciseLog que los demás (campo `done`),
-  // para que la referencia de la semana anterior (ver más abajo) los
-  // trate de forma uniforme.
-  function setGymSimpleDone(blockNumber, week, day, exerciseId, done) {
+  // Casilla "Hecho" de un ejercicio: un solo campo (`done`, en el mismo
+  // exerciseLog de siempre) para los dos modos —
+  // - "simple" (sin peso): es su única forma de cerrarse, de toda la
+  //   vida (antes se llamaba setGymSimpleDone).
+  // - "sets": la cierra aunque falten series por completar ("ya no se
+  //   espera que agregue más", ver el pedido original) — independiente
+  //   de isExerciseComplete (series completas), que sigue siendo la
+  //   señal de "colapsar lo ya terminado" cuando nunca se tocó esta
+  //   casilla.
+  // No toca la cola + puntero (gymQueue/resolutions) en absoluto: marcar
+  // un ejercicio como Hecho no marca la sesión del día como cumplida, ni
+  // al revés.
+  function setGymExerciseDone(blockNumber, week, day, exerciseId, done) {
     const log = ensureGymExerciseLog(blockNumber, week, day, exerciseId);
     if (!log) return;
     log.done = done;
@@ -2636,7 +2644,7 @@ window.Agenda = window.Agenda || {};
     copyLastGymSet,
     updateGymSet,
     removeGymSet,
-    setGymSimpleDone,
+    setGymExerciseDone,
     addGymExercise,
     updateGymExercise,
     removeGymExercise,

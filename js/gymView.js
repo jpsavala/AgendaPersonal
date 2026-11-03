@@ -40,11 +40,26 @@ window.Agenda = window.Agenda || {};
   // limpia cada vez que se cambia de semana o de bloque (ver
   // setWeek/setBlock), para que esa regla vuelva a decidir sola.
   let dayExpansionOverride = {};
-  // Ejercicios colapsados a mano (todo lo demás, dentro de un día
-  // visible, arranca expandido — ver isExerciseExpanded).
-  let collapsedExerciseIds = new Set();
+  // Ejercicios desplegados/colapsados a mano con la flechita, por
+  // fuera de los valores por defecto (Hecho / terminado antes del
+  // recordado, ver isExerciseExpanded) — exerciseId -> boolean. Los ids
+  // de ejercicio se repiten entre semanas de un mismo bloque+día (ver
+  // js/gymRoutines.js: withIds), así que se limpia cada vez que cambia
+  // la semana/bloque visible (igual que dayExpansionOverride) para que
+  // no se "filtre" de una semana a otra; también se limpia al volver a
+  // entrar a la pestaña (ver syncPositionOnMount), para que "Hecho"
+  // vuelva a arrancar colapsado en cada visita aunque se haya
+  // desplegado a mano en la visita anterior.
+  let exerciseExpandOverride = new Map();
   let editingExercise = null; // { day, id } o null
   let addingExerciseDay = null; // número de día (1-5) o null
+  // Snapshot del campo con foco justo antes de este render (ver
+  // captureFocus/restoreFocus) — vive solo durante el render en curso
+  // (se pisa al principio de cada uno, ver render()), para que
+  // isExerciseExpanded pueda consultar "¿esta tarjeta tenía un campo
+  // enfocado?" después de que container.innerHTML = "" ya borró el
+  // campo real (document.activeElement ya no sirve para esto).
+  let renderFocusSnapshot = null;
 
   // ---------- Guardado con debounce + foco que no se pierde al tipear ----------
   // Peso/reps/RIR/notas se escriben tecla por tecla: guardar (ver
@@ -167,13 +182,14 @@ window.Agenda = window.Agenda || {};
     currentBlockNumber = number;
     currentWeek = null;
     dayExpansionOverride = {};
-    collapsedExerciseIds = new Set();
+    exerciseExpandOverride = new Map();
     render(containerRef);
   }
 
   function setWeek(week) {
     currentWeek = week;
     dayExpansionOverride = {};
+    exerciseExpandOverride = new Map();
     render(containerRef);
   }
 
@@ -187,20 +203,68 @@ window.Agenda = window.Agenda || {};
     );
   }
 
-  function isExerciseExpanded(exerciseId) {
-    return !collapsedExerciseIds.has(exerciseId);
+  // ¿Había un campo de ESTE ejercicio con foco justo antes de este
+  // render? (ver renderFocusSnapshot, capturado al principio de
+  // render() antes de borrar el DOM viejo — para cuando se llega acá
+  // document.activeElement ya no sirve, el input de antes ya no existe).
+  // Si lo había, isExerciseExpanded lo mantiene desplegado sin importar
+  // Hecho ni "terminado": un redibujado por otro motivo (p. ej. una
+  // sincronización remota) no debe colapsarlo mientras se está
+  // escribiendo adentro — ver el pedido original, parte 3.
+  function exerciseHasFocusedField(blockNumber, week, day, exercise) {
+    if (!renderFocusSnapshot) return false;
+    const prefix = fieldKey(blockNumber, week, day, exercise.id) + ":";
+    return renderFocusSnapshot.key.startsWith(prefix);
   }
 
-  function toggleExercise(exerciseId) {
-    if (collapsedExerciseIds.has(exerciseId)) collapsedExerciseIds.delete(exerciseId);
-    else collapsedExerciseIds.add(exerciseId);
+  // Terminados ANTES del ejercicio recordado (ver syncPositionOnMount:
+  // positionAt/exerciseId), dentro de la ventana de 3h y el mismo
+  // bloque/semana/día — arrancan colapsados con su resumen, el
+  // recordado y los siguientes quedan abiertos (ver el pedido original
+  // de la tarea anterior). Evaluado en cada construcción (no una sola
+  // vez al montar) para que decidir si ESTE ejercicio puntual entra en
+  // la regla sea siempre con los datos de ahora.
+  function isCompleteBeforeRemembered(blockNumber, week, day, exercise) {
+    const uiState = state.getGymUiState();
+    if (!uiState || !uiState.exerciseId || !uiState.positionAt) return false;
+    if (Date.now() - uiState.positionAt >= THREE_HOURS_MS) return false;
+    if (uiState.blockNumber !== blockNumber || uiState.week !== week || uiState.day !== day) return false;
+    const exercises = state.getGymRoutineDay(blockNumber, day);
+    const rememberedIdx = exercises.findIndex((e) => e.id === uiState.exerciseId);
+    const myIdx = exercises.findIndex((e) => e.id === exercise.id);
+    if (rememberedIdx === -1 || myIdx === -1 || myIdx >= rememberedIdx) return false;
+    return isExerciseComplete(blockNumber, week, day, exercise);
+  }
+
+  // Si se desplegó/colapsó a mano con la flechita (ver toggleExercise),
+  // eso manda. Si no, por defecto:
+  // - con un campo propio enfocado, desplegado siempre (ver arriba).
+  // - "Hecho" (casilla nueva, ver el pedido original) colapsa, CON
+  //   PRIORIDAD sobre la regla de abajo: uno a medio llenar pero
+  //   marcado Hecho igual se colapsa, y uno con series completas pero
+  //   SIN marcar Hecho sigue la regla de siempre.
+  // - terminado antes del recordado (ver isCompleteBeforeRemembered):
+  //   colapsa.
+  // - cualquier otro caso: desplegado.
+  function isExerciseExpanded(blockNumber, week, day, exercise) {
+    if (exerciseExpandOverride.has(exercise.id)) return exerciseExpandOverride.get(exercise.id);
+    if (exerciseHasFocusedField(blockNumber, week, day, exercise)) return true;
+    const log = state.getGymWeekDay(blockNumber, week, day).exercises[exercise.id];
+    if (log && log.done) return false;
+    return !isCompleteBeforeRemembered(blockNumber, week, day, exercise);
+  }
+
+  function toggleExercise(exerciseId, nextExpanded) {
+    exerciseExpandOverride.set(exerciseId, nextExpanded);
     render(containerRef);
   }
 
   // "Terminado" = tiene todas sus series con datos (peso cuando
-  // corresponde + reps) en modo series, o la casilla "hecho" marcada en
-  // modo simple — ver el pedido original, parte 3. Uno a medio llenar
-  // NUNCA se da por terminado (no se colapsa solo).
+  // corresponde + reps) en modo series, o la casilla "Hecho" marcada en
+  // modo simple (ahí "Hecho" y "terminado" son el mismo campo, de toda
+  // la vida) — ver el pedido original, parte 3. Uno a medio llenar
+  // NUNCA se da por terminado solo por esto (pero si además se marca
+  // Hecho a mano, igual se colapsa — ver isExerciseExpanded).
   function isExerciseComplete(blockNumber, week, day, exercise) {
     const log = state.getGymWeekDay(blockNumber, week, day).exercises[exercise.id];
     if (!log) return false;
@@ -236,21 +300,6 @@ window.Agenda = window.Agenda || {};
     return `${formatSetWeightLabel(first)} x ${first.reps || "?"}${rir}, ${log.sets.length} ${plural}`;
   }
 
-  // Ejercicios antes del recordado (en el orden de la rutina de ese
-  // día) que ya están terminados: arrancan colapsados, con su resumen
-  // en vez de las series — ver el pedido original, parte 3. El
-  // ejercicio recordado y los siguientes quedan abiertos.
-  function computeInitialCollapse(blockNumber, week, day, exerciseId) {
-    const exercises = state.getGymRoutineDay(blockNumber, day);
-    const idx = exercises.findIndex((e) => e.id === exerciseId);
-    const collapsed = new Set();
-    if (idx === -1) return collapsed;
-    for (let i = 0; i < idx; i += 1) {
-      if (isExerciseComplete(blockNumber, week, day, exercises[i])) collapsed.add(exercises[i].id);
-    }
-    return collapsed;
-  }
-
   // Se llama una vez cada vez que se ENTRA a la pestaña (ver mount(),
   // nunca desde render() a secas: si no, cada tecla/acción dentro de la
   // misma sesión volvería a disparar el scroll/resaltado). Decide la
@@ -258,15 +307,22 @@ window.Agenda = window.Agenda || {};
   // visita:
   // - Si hay una posición guardada (ver state.getGymUiState) de menos
   //   de 3 horas, la restaura (y, si trae un ejercicio, programa el
-  //   scroll + colapsa los terminados de antes — ver
-  //   computeInitialCollapse) — pero solo la primera vez que se ve ESA
-  //   posición puntual (lastHandledPositionAt), para no repetir el
-  //   scroll si se vuelve a esta misma pestaña sin que haya nada nuevo
-  //   que recordar.
+  //   scroll — el colapso de los terminados de antes y de los
+  //   marcados Hecho lo decide isExerciseExpanded en cada construcción,
+  //   ya no hace falta precalcularlo acá) — pero el scroll/resaltado
+  //   solo la primera vez que se ve ESA posición puntual
+  //   (lastHandledPositionAt), para no repetirlo si se vuelve a esta
+  //   misma pestaña sin que haya nada nuevo que recordar.
   // - Si no (nada guardado, o pasaron más de 3 horas), refleja la
   //   sesión que le toca a HOY según la cola + puntero — nunca se queda
   //   pegada a una semana vieja por inercia (ver el bug reportado).
+  // Siempre arranca sin overrides manuales de ejercicio (ver
+  // exerciseExpandOverride): "Hecho" vuelve a colapsar por defecto en
+  // cada entrada a la pestaña, aunque la visita anterior lo haya
+  // desplegado a mano para editar.
   function syncPositionOnMount() {
+    exerciseExpandOverride = new Map();
+
     const blockNumbers = state.getGymBlockNumbers();
     if (!blockNumbers.length) {
       defaultsApplied = true;
@@ -286,9 +342,6 @@ window.Agenda = window.Agenda || {};
       currentBlockNumber = uiState.blockNumber;
       currentWeek = uiState.week;
       dayExpansionOverride = { [uiState.day]: true };
-      collapsedExerciseIds = uiState.exerciseId
-        ? computeInitialCollapse(uiState.blockNumber, uiState.week, uiState.day, uiState.exerciseId)
-        : new Set();
       pendingScrollExerciseId = uiState.exerciseId || null;
       highlightExerciseId = uiState.exerciseId || null;
       highlightUntil = uiState.exerciseId ? Date.now() + 2500 : 0;
@@ -300,7 +353,6 @@ window.Agenda = window.Agenda || {};
         currentBlockNumber = todayBlock;
         currentWeek = todayWeek;
         dayExpansionOverride = {};
-        collapsedExerciseIds = new Set();
       }
     }
 
@@ -454,17 +506,18 @@ window.Agenda = window.Agenda || {};
   }
 
   function buildExerciseCard(blockNumber, week, day, exercise) {
-    const expanded = isExerciseExpanded(exercise.id);
+    const expanded = isExerciseExpanded(blockNumber, week, day, exercise);
     const log = state.getGymWeekDay(blockNumber, week, day).exercises[exercise.id] || { note: "", sets: [], done: false };
     const prevRef = state.getGymPreviousReference(blockNumber, week, day, exercise.id);
+    const doneMark = log.done ? "✓ " : "";
 
     const head = el(
       "div",
       { class: "gym-exercise-head" },
       el(
         "button",
-        { class: "gym-exercise-toggle", onclick: () => toggleExercise(exercise.id) },
-        `${expanded ? "▾" : "▸"} ${exercise.name}`
+        { class: "gym-exercise-toggle", onclick: () => toggleExercise(exercise.id, !expanded) },
+        `${expanded ? "▾" : "▸"} ${doneMark}${exercise.name}`
       ),
       el(
         "div",
@@ -506,10 +559,14 @@ window.Agenda = window.Agenda || {};
     }
 
     if (!expanded) {
-      // Colapsado por "terminado" (ver computeInitialCollapse): una
-      // línea de resumen en vez de dejarlo en blanco, para saber qué se
-      // hizo sin tener que volver a abrirlo.
-      const summary = isExerciseComplete(blockNumber, week, day, exercise) ? exerciseSummaryLine(blockNumber, week, day, exercise) : "";
+      // Colapsado por "Hecho" o por "terminado" (ver
+      // isExerciseExpanded): una línea de resumen en vez de dejarlo en
+      // blanco, para saber qué se hizo sin tener que volver a abrirlo.
+      // "Hecho" muestra resumen aunque falten series por completar (ya
+      // no se espera que se agreguen más) — isExerciseComplete solo
+      // hace falta para el caso en que se colapsó por "terminado" sin
+      // haber marcado Hecho.
+      const summary = log.done || isExerciseComplete(blockNumber, week, day, exercise) ? exerciseSummaryLine(blockNumber, week, day, exercise) : "";
       return el(
         "div",
         { class: "card gym-exercise-card collapsed", "data-gym-exercise-card": exercise.id },
@@ -525,11 +582,11 @@ window.Agenda = window.Agenda || {};
       body.appendChild(
         el(
           "label",
-          { class: "check-row" + (log.done ? " done" : "") },
+          { class: "check-row gym-exercise-done-row" + (log.done ? " done" : "") },
           el("input", {
             type: "checkbox",
             checked: log.done ? "checked" : null,
-            onchange: (e) => state.setGymSimpleDone(blockNumber, week, day, exercise.id, e.target.checked),
+            onchange: (e) => state.setGymExerciseDone(blockNumber, week, day, exercise.id, e.target.checked),
           }),
           el("span", null, "Hecho")
         )
@@ -572,6 +629,25 @@ window.Agenda = window.Agenda || {};
         state.setGymExerciseNote(blockNumber, week, day, exercise.id, setsNoteInput.value);
       });
       body.appendChild(setsNoteInput);
+
+      // "Hecho" (ver el pedido original): cierra el ejercicio aunque
+      // falten series — a diferencia de "+ Agregar serie"/"Copiar
+      // serie anterior" (que siguen disponibles sin límite), esta
+      // casilla es la única señal de "ya terminé con esto". Mismo
+      // campo `done` que el "Hecho" de los ejercicios "simple" (ver
+      // state.setGymExerciseDone), no uno nuevo.
+      body.appendChild(
+        el(
+          "label",
+          { class: "check-row gym-exercise-done-row" + (log.done ? " done" : "") },
+          el("input", {
+            type: "checkbox",
+            checked: log.done ? "checked" : null,
+            onchange: (e) => state.setGymExerciseDone(blockNumber, week, day, exercise.id, e.target.checked),
+          }),
+          el("span", null, "Hecho")
+        )
+      );
     }
 
     const highlighted = highlightExerciseId === exercise.id && Date.now() < highlightUntil;
@@ -664,6 +740,14 @@ window.Agenda = window.Agenda || {};
       card.appendChild(buildExerciseCard(blockNumber, week, day, exercise));
     });
 
+    // Aviso discreto (opcional, ver el pedido original, parte 3): no
+    // marca nada solo, solo informa — se recalcula en cada render, así
+    // que aparece y desaparece solo a medida que se marcan/desmarcan
+    // casillas "Hecho".
+    if (exercises.length && exercises.every((ex) => !!weekLog.exercises[ex.id] && !!weekLog.exercises[ex.id].done)) {
+      card.appendChild(el("p", { class: "gym-day-all-done" }, "✓ Todos los ejercicios hechos"));
+    }
+
     if (addingExerciseDay === day) {
       card.appendChild(buildAddExerciseForm(blockNumber, day));
     } else {
@@ -681,11 +765,19 @@ window.Agenda = window.Agenda || {};
 
   function render(container) {
     if (!container) return;
+    // Capturado ANTES de borrar el DOM viejo (ver exerciseHasFocusedField
+    // más arriba): se usa mientras se construyen las tarjetas de acá
+    // abajo, y se restaura al final — así CUALQUIER llamada a render()
+    // (no solo refresh(), también setBlock/setWeek/toggleExercise/los
+    // onclick de los botones) conserva el foco y evita colapsar un
+    // ejercicio que se estaba editando.
+    renderFocusSnapshot = captureFocus(container);
     container.innerHTML = "";
 
     const blockNumbers = state.getGymBlockNumbers();
     if (!blockNumbers.length) {
       container.appendChild(el("p", { class: "muted" }, "Todavía no hay bloques de gimnasio cargados."));
+      renderFocusSnapshot = null;
       return;
     }
 
@@ -733,7 +825,17 @@ window.Agenda = window.Agenda || {};
       daysWrap.appendChild(buildDayCard(meta, currentBlockNumber, currentWeek, i + 1, dayName, todayLocation));
     });
 
-    container.append(header, weekTabs, rulesCard, daysWrap);
+    // Espacio al final para que el FAB "+" (fijo, abajo a la derecha)
+    // no quede encima de la casilla "Hecho" del último ejercicio — ver
+    // css: .fab-bottom-spacer (ya usado igual en la Semanal; en mobile
+    // no hace falta, la barra inferior + el FAB levantado dejan margen
+    // de sobra).
+    const bottomSpacer = el("div", { class: "fab-bottom-spacer" });
+
+    container.append(header, weekTabs, rulesCard, daysWrap, bottomSpacer);
+
+    restoreFocus(container, renderFocusSnapshot);
+    renderFocusSnapshot = null;
 
     // Scroll (una sola vez) al ejercicio recordado (ver
     // syncPositionOnMount) — el resaltado en sí ya lo decide
@@ -761,14 +863,13 @@ window.Agenda = window.Agenda || {};
     // que sí llama a notify()), o cualquier otra mutación en otra
     // parte de la app que dispare notify() mientras esta pestaña está
     // activa. Las propias teclas de esta pestaña ya no pasan por acá
-    // (ver wireDebouncedInput/persist() en js/state.js), pero por si
-    // acaso: conserva el foco, el cursor y el texto ya tecleado del
-    // campo activo después de redibujar.
+    // (ver wireDebouncedInput/persist() en js/state.js); el foco, el
+    // cursor y lo ya tecleado del campo activo se conservan dentro de
+    // render() mismo (ver renderFocusSnapshot), no hace falta repetirlo
+    // acá.
     refresh() {
       if (!containerRef) return;
-      const snapshot = captureFocus(containerRef);
       render(containerRef);
-      restoreFocus(containerRef, snapshot);
     },
     // Abre directamente una sesión puntual (ver js/app.js:
     // openGymSession, llamado desde "Registrar" en Diaria/Semanal) —
@@ -782,7 +883,7 @@ window.Agenda = window.Agenda || {};
       currentWeek = week;
       defaultsApplied = true;
       dayExpansionOverride = { [day]: true };
-      collapsedExerciseIds = new Set();
+      exerciseExpandOverride = new Map();
       pendingScrollExerciseId = null;
       highlightExerciseId = null;
       state.touchGymPosition(blockNumber, week, day);

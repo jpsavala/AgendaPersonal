@@ -1792,6 +1792,35 @@ h2, h3, h4 {
   margin-top: 0.1rem;
 }
 
+/* Casilla "Hecho" de cada ejercicio (ver js/gymView.js:
+   buildExerciseCard): compacta, una sola línea de texto, pero con
+   44px de alto para que el toque sea cómodo a 375px y en iPad — el
+   padding vertical agranda el área táctil sin agrandar el texto. */
+.gym-exercise-done-row {
+  min-height: 44px;
+  padding: 0.3rem 0;
+  font-size: 0.88rem;
+}
+
+.gym-exercise-done-row input[type="checkbox"] {
+  width: 1.3rem;
+  height: 1.3rem;
+}
+
+.gym-exercise-done-row.done span {
+  color: var(--accent-green);
+  font-weight: 600;
+}
+
+/* Aviso opcional cuando ya se marcaron todos los ejercicios del día
+   (ver el pedido original, parte 3): informa, no marca nada solo. */
+.gym-day-all-done {
+  font-size: 0.85rem;
+  color: var(--accent-green);
+  font-weight: 600;
+  margin: 0.4rem 0 0;
+}
+
 /* Cada serie en una sola fila compacta, pensada primero para celular:
    los campos (peso, unidad, barra, reps, RIR) van en su propia franja
    que envuelve si no entra, la nota y el botón de quitar debajo en su
