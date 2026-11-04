@@ -320,6 +320,22 @@ window.Agenda = window.Agenda || {};
 
   function applyGymEdit(dateStr, done) {
     const result = state.editGymDay(dateStr, done);
+    if (!result.ok && result.reason === "needs-confirmation") {
+      // Fechas posteriores que seguirían correspondiendo a una sesión
+      // válida, solo que a OTRA (ver js/scheduleQueue.js:
+      // editResolution) — no es un choque irresoluble: se pregunta
+      // antes de reproyectarlas, en vez de bloquear para siempre.
+      if (confirmGymReprojection(result.changes)) {
+        const confirmed = state.editGymDay(dateStr, done, true);
+        if (!confirmed.ok && confirmed.reason === "conflict") showGymConflictWarning(confirmed.conflicts);
+      }
+      // Cancelar o chocar de verdad: se sale igual del modo "Corregir"
+      // sin aplicar nada (ver el "no" de abajo) — ya se explicó qué
+      // pasaba, insistir con el mismo prompt no ayuda.
+      editingGymDate = null;
+      render(containerRef);
+      return;
+    }
     editingGymDate = null;
     if (!result.ok && result.reason === "conflict") {
       showGymConflictWarning(result.conflicts);
@@ -341,6 +357,25 @@ window.Agenda = window.Agenda || {};
     const plural = conflicts.length > 1;
     alert(
       `No se pudo aplicar la corrección: choca con ${plural ? conflicts.length + " fechas posteriores" : "una fecha posterior"} que ya ${plural ? "tienen" : "tiene"} su propia respuesta guardada:\n\n${lines.join("\n")}\n\nCorregí esas fechas primero (de la misma forma) y volvé a intentar.`
+    );
+  }
+
+  // Vista previa de la reproyección (ver js/scheduleQueue.js:
+  // editResolution, reason "needs-confirmation"): cada fecha listada
+  // sigue teniendo una sesión válida y conserva su propio estado
+  // (hecho/no realizado) — solo cambia a cuál de las sesiones de la
+  // cola corresponde. Nunca toca el peso/reps/RIR ya registrado (eso
+  // vive aparte, en el seguimiento de Gimnasio). true = aplicar y
+  // reproyectar, false = cancelar sin cambiar nada.
+  function confirmGymReprojection(changes) {
+    const lines = changes.map((c) => {
+      const dateLabel = dateUtils.formatLong(dateUtils.fromISO(c.date));
+      const estado = c.newStatus === "done" ? "hecho" : "no realizado";
+      return `• ${dateLabel}: "${c.oldSession}" → "${c.newSession}" (sigue ${estado})`;
+    });
+    const plural = changes.length > 1;
+    return confirm(
+      `Este cambio corre ${plural ? changes.length + " fechas posteriores" : "una fecha posterior"} a la sesión que le toca ahora, sin tocar lo ya registrado (pesos, reps, RIR):\n\n${lines.join("\n")}\n\n¿Aplicar y reproyectar las fechas posteriores?`
     );
   }
 

@@ -623,13 +623,20 @@ window.Agenda = window.Agenda || {};
 
   // Corrige una respuesta de "¿Entrenaste hoy?" ya guardada (de
   // cualquier fecha pasada, no solo la más reciente; incluye una fecha
-  // que se haya congelado sola sin marcar nunca). Si el cambio entra en
-  // conflicto con una fecha posterior que ya tiene su propia respuesta
-  // guardada, no cambia nada: devuelve el conflicto para que la UI lo
-  // muestre antes de decidir. Sigue funcionando igual para fechas del
-  // Bloque 5 (cerrado) y del Bloque 6 (vigente): cada una corrige contra
-  // el bloque al que le corresponde su propia fecha.
-  function editGymDay(dateStr, done) {
+  // que se haya congelado sola sin marcar nunca). Si alguna fecha
+  // posterior ya resuelta dejaría de corresponder a una sesión válida,
+  // no cambia nada (reason: "conflict", irresoluble). Si en cambio
+  // quedaría apuntando a otra sesión de la cola (p. ej. dos fechas
+  // reclamando la misma por el mismo motivo que generó esta
+  // corrección), no se aplica sola: devuelve reason: "needs-
+  // confirmation" con la vista previa (ver js/scheduleQueue.js:
+  // editResolution) para que la UI pregunte antes de reproyectar —
+  // pasando confirmReprojection=true recién ahí se aplica, conservando
+  // el estado (hecho/no realizado) de cada fecha posterior, solo
+  // cambia a qué sesión corresponde. Sigue funcionando igual para
+  // fechas del Bloque 5 (cerrado) y del Bloque 6 (vigente): cada una
+  // corrige contra el bloque al que le corresponde su propia fecha.
+  function editGymDay(dateStr, done, confirmReprojection) {
     const block = findGymBlockForDate(dateStr);
     if (!block) return { ok: false, reason: "not-resolved" };
     const todayStr = toISO(new Date());
@@ -639,7 +646,8 @@ window.Agenda = window.Agenda || {};
       dateStr,
       todayStr,
       makeIsValidGymDayForBlock(block),
-      done ? "done" : "skipped"
+      done ? "done" : "skipped",
+      confirmReprojection
     );
     if (result.ok && result.changed) notify();
     return result;

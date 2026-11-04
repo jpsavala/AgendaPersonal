@@ -29,11 +29,12 @@
  * - El 2 de nov (y el resto del rango 3-16 nov) queda coherente con
  *   el puntero, con Hecho/Corregir/Registrar, nunca campo de texto
  *   libre.
- * - Intentar marcar el 2 de nov como hecho cuando choca con el 5 de
- *   nov (ya cumplido, mismo índice) avisa el choque — nunca lo pisa
- *   en silencio.
- * - Una vez sin choque, marcar una fecha afectada por el hueco como
- *   hecha retroactivamente funciona y reproyecta lo posterior.
+ * - Marcar el 2 de nov como hecho reproyectando el 5 de nov (ya
+ *   cumplido, mismo índice) avisa con una vista previa — nunca lo pisa
+ *   en silencio (la prueba dedicada a ese flujo es
+ *   tests/gym-queue-reproject.test.js).
+ * - Marcar una fecha afectada por el hueco como hecha retroactivamente
+ *   funciona y reproyecta lo posterior.
  * - No toca el Bloque 5 ni los registros ya cumplidos.
  * - Persiste tras recargar.
  *
@@ -160,22 +161,24 @@ async function main() {
     check(info && info.gymActionsText === "No realizada", 'el 2 de nov muestra "No realizada" (día pasado, auto-congelado)');
     check(info && info.hasRegistrar, "el 2 de nov muestra Registrar");
 
-    // Intentar marcar el 2 de nov como hecho CHOCA con el 5 de nov (ya
-    // cumplido, mismo índice: ¿se hizo esa sesión el 2 o el 5?) — la
-    // app debe avisar, nunca pisar el 5 de nov en silencio.
+    // Marcar el 2 de nov como hecho reproyectaría el 5 de nov (ya
+    // cumplido) a otra sesión válida — no es un choque irresoluble
+    // (ver js/scheduleQueue.js: editResolution), así que avisa con una
+    // vista previa y pregunta en vez de bloquear para siempre.
+    // Cancelando, no cambia nada.
     let dialogMessage = null;
     page.once("dialog", (dialog) => {
       dialogMessage = dialog.message();
-      dialog.accept();
+      dialog.dismiss();
     });
     await clickCorregir(page);
     await clickSiNo(page, "Sí");
 
-    check(!!dialogMessage && dialogMessage.includes("choca con"), "avisa el choque con el 5 de nov en vez de pisarlo en silencio");
+    check(!!dialogMessage && dialogMessage.includes("reproyectar"), "avisa con una vista previa (no un bloqueo ciego) en vez de rechazar");
     const nov5Untouched = await page.evaluate(() => window.Agenda.state.getGymResolution("2026-11-05"));
-    check(nov5Untouched && nov5Untouched.status === "done", "el 5 de nov (ya cumplido) no se tocó por el intento de choque");
+    check(nov5Untouched && nov5Untouched.status === "done", "el 5 de nov (ya cumplido) no se tocó al cancelar");
     const nov2StillPending = await page.evaluate(() => window.Agenda.state.getGymResolution("2026-11-02"));
-    check(nov2StillPending && nov2StillPending.status === "skipped", "el 2 de nov tampoco quedó a medio escribir tras el choque");
+    check(nov2StillPending && nov2StillPending.status === "skipped", "el 2 de nov tampoco quedó a medio escribir al cancelar");
 
     console.log("Diagnóstico — errores de página:", JSON.stringify(errors));
     check(errors.length === 0, "Diagnóstico: sin errores de JS");

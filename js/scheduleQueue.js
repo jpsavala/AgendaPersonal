@@ -149,16 +149,30 @@ window.Agenda = window.Agenda || {};
   // era 'Sí'". No se limita a "hoy": aplica a cualquier fecha pasada.
   //
   // Antes de tocar nada, simula de nuevo, con el estado nuevo, todas
-  // las fechas POSTERIORES que ya tengan su propia resolución guardada,
-  // y compara contra lo que ya está guardado ahí. Si alguna no
-  // coincide (le tocaría otra sesión, o directamente dejaría de ser un
-  // día válido de entrenar), no cambia nada y devuelve el conflicto
-  // para que quien llama decida — nunca sobrescribe en silencio.
+  // las fechas POSTERIORES que ya tengan su propia resolución guardada.
+  // Dos casos posibles:
+  // - Alguna deja de corresponder a una sesión válida (`r` sale null —
+  //   p. ej. un sábado que ya no sería comodín): no hay nada razonable
+  //   para reproyectar ahí, así que esto SIEMPRE bloquea, con o sin
+  //   confirmación — se devuelve en `conflicts`.
+  // - Alguna sigue correspondiendo a una sesión, pero DISTINTA de la
+  //   que tenía guardada (el típico "two fechas reclamando la misma
+  //   sesión", ver el bug reportado: corregir una fecha anterior sin
+  //   haber tocado antes una posterior que quedó pegada a esa misma
+  //   sesión por el mismo motivo). Esto YA NO bloquea para siempre: se
+  //   devuelve en `changes` como vista previa (fecha, sesión y estado
+  //   antes/después) y hace falta pasar `confirmReprojection: true`
+  //   para aplicarlo. Al aplicar, cada fecha reproyectada CONSERVA su
+  //   propio estado (hecho/no realizado) — nunca se le borra ni se le
+  //   inventa uno nuevo, solo cambia a qué sesión de la cola
+  //   corresponde esa fecha. El registro de peso/reps/RIR ya cargado
+  //   (ver js/state.js: weeks/exercises, aparte de esta cola) no vive
+  //   acá — nunca se toca.
   //
-  // Devuelve { ok: true, changed } si se aplicó (o no hacía falta
-  // cambiar nada), o { ok: false, reason: "not-resolved" | "conflict",
-  // conflicts? } si no se pudo.
-  function editResolution(queueState, sessions, dateStr, todayStr, isValidDay, newStatus) {
+  // Devuelve { ok: true, changed, reprojected? } si se aplicó (o no
+  // hacía falta cambiar nada), o { ok: false, reason: "not-resolved" |
+  // "conflict" | "needs-confirmation", conflicts?, changes? } si no.
+  function editResolution(queueState, sessions, dateStr, todayStr, isValidDay, newStatus, confirmReprojection) {
     const current = resolve(queueState, sessions, dateStr, todayStr, isValidDay);
     if (!current || (current.status !== "done" && current.status !== "skipped")) {
       return { ok: false, reason: "not-resolved" };
@@ -184,32 +198,31 @@ window.Agenda = window.Agenda || {};
       unavailable: queueState.unavailable,
     };
 
-    const conflicts = [];
+    const blocked = [];
+    const changes = [];
     const recomputed = {};
     laterDates.forEach((d) => {
       const old = queueState.resolutions[d];
       const r = resolve(trialQueue, sessions, d, todayStr, isValidDay);
-      if (!r || r.index !== old.index) {
-        conflicts.push({
-          date: d,
-          oldSession: sessions[old.index],
-          oldStatus: old.status,
-          newSession: r ? sessions[r.index] : null,
-          newStatus: r ? r.status : null,
-        });
-      } else {
-        recomputed[d] = { status: old.status, index: r.index };
+      if (!r) {
+        blocked.push({ date: d, oldSession: sessions[old.index], oldStatus: old.status, newSession: null, newStatus: null });
+        return;
+      }
+      recomputed[d] = { status: old.status, index: r.index };
+      if (r.index !== old.index) {
+        changes.push({ date: d, oldSession: sessions[old.index], oldStatus: old.status, newSession: sessions[r.index], newStatus: old.status });
       }
     });
 
-    if (conflicts.length) return { ok: false, reason: "conflict", conflicts };
+    if (blocked.length) return { ok: false, reason: "conflict", conflicts: blocked };
+    if (changes.length && !confirmReprojection) return { ok: false, reason: "needs-confirmation", changes };
 
     queueState.resolutions[dateStr] = { status: newStatus, index: current.index };
     laterDates.forEach((d) => {
       queueState.resolutions[d] = recomputed[d];
     });
     queueState.pointer = derivePointer(queueState.resolutions, pointerAtSeed);
-    return { ok: true, changed: true };
+    return { ok: true, changed: true, reprojected: changes.length > 0 };
   }
 
   ns.scheduleQueue = { resolve, markDone, markSkipped, setUnavailable, editResolution, anchorOf };
