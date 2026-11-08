@@ -735,6 +735,252 @@ h2, h3, h4 {
   margin-top: 0.5rem;
 }
 
+.meal-row-wrap {
+  padding-bottom: 0.3rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.meal-list .meal-row-wrap:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.meal-no-ingredients {
+  flex: 0 0 auto;
+  font-size: 0.78rem;
+  white-space: nowrap;
+}
+
+/* Lista de ingredientes de una receta (ver js/mealsView.js:
+   buildIngredientsSection) — arranca colapsada, el toggle es un botón
+   de texto simple (no necesita 44px: no es un campo ni una casilla). */
+.ingredients-toggle {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-family: var(--font-sans);
+  font-size: 0.8rem;
+  padding: 0.3rem 0;
+  cursor: pointer;
+}
+
+.ingredients-toggle:hover {
+  color: var(--accent-green);
+}
+
+.ingredients-section {
+  margin-top: 0.3rem;
+  padding-left: 0.4rem;
+}
+
+.ingredient-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  margin: 0.4rem 0;
+}
+
+.ingredient-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+.ingredient-name-input,
+.ingredient-qty-input,
+.ingredient-unit-input {
+  min-height: 44px;
+  padding: 0.4rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-family: var(--font-sans);
+  font-size: 0.9rem;
+  background: var(--surface);
+  color: var(--text-primary);
+}
+
+.ingredient-name-input {
+  flex: 1 1 120px;
+  min-width: 0;
+}
+
+.ingredient-qty-input {
+  flex: 0 1 4.2rem;
+  min-width: 0;
+  text-align: center;
+}
+
+.ingredient-unit-input {
+  flex: 0 1 4.8rem;
+  min-width: 0;
+}
+
+.ingredient-move-btn {
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-muted);
+  width: 1.8rem;
+  height: 1.8rem;
+  line-height: 1;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.ingredient-move-btn:hover:not(:disabled) {
+  border-color: var(--accent-green);
+  color: var(--accent-green);
+}
+
+.ingredient-move-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+/* ---------- Súper (ver js/mealsView.js: buildSuperCard) ---------- */
+.super-card .view-header {
+  margin-bottom: 0.5rem;
+}
+
+.super-missing-notice {
+  margin: 0 0 0.6rem;
+}
+
+.pantry-suggestions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  margin-bottom: 0.6rem;
+}
+
+.pantry-suggestion {
+  background: rgba(169, 139, 74, 0.12);
+  border-radius: 8px;
+  padding: 0.5rem 0.6rem;
+}
+
+.pantry-suggestion p {
+  margin: 0 0 0.4rem;
+  font-size: 0.88rem;
+}
+
+.super-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  margin: 0.4rem 0 0.8rem;
+}
+
+.super-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  min-height: 44px;
+  border-bottom: 1px solid var(--border);
+}
+
+.super-list .super-row:last-child {
+  border-bottom: none;
+}
+
+.super-row-check-label {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  min-height: 44px;
+  flex: 1 1 auto;
+  min-width: 0;
+  cursor: pointer;
+}
+
+.super-row-check-label input[type="checkbox"] {
+  width: 1.1rem;
+  height: 1.1rem;
+  accent-color: var(--accent-green-light);
+  flex-shrink: 0;
+}
+
+.super-row-content {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.super-row-name {
+  font-size: 0.95rem;
+}
+
+.super-row-origin {
+  font-size: 0.74rem;
+  color: var(--text-muted);
+}
+
+.super-row.bought .super-row-name {
+  text-decoration: line-through;
+  color: var(--text-muted);
+}
+
+.super-row.bought .super-row-origin {
+  text-decoration: line-through;
+}
+
+.super-copy-btn {
+  margin-top: 0.3rem;
+}
+
+.pantry-section {
+  margin-top: 1rem;
+  padding-top: 0.8rem;
+  border-top: 1px solid var(--border);
+}
+
+.pantry-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  margin-bottom: 0.6rem;
+}
+
+.pantry-item-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.pantry-item-check-label {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-height: 44px;
+  flex: 0 0 auto;
+  cursor: pointer;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+
+.pantry-item-check-label input[type="checkbox"] {
+  width: 1.1rem;
+  height: 1.1rem;
+  accent-color: var(--accent-green-light);
+  flex-shrink: 0;
+}
+
+.pantry-item-name-input {
+  flex: 1 1 120px;
+  min-width: 0;
+  min-height: 44px;
+  padding: 0.4rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-family: var(--font-sans);
+  font-size: 0.95rem;
+  background: var(--surface);
+  color: var(--text-primary);
+}
+
 .schedule-marker {
   display: flex;
   align-items: center;

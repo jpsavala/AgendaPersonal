@@ -1468,6 +1468,64 @@ window.Agenda = window.Agenda || {};
     notify();
   }
 
+  // ---------- Ingredientes de cada receta (para el Súper, ver más abajo) ----------
+  // Viven dentro de la propia receta (meal.ingredients), en el mismo
+  // documento que el resto de la librería de comidas — se sincronizan
+  // solos con el resto. Las recetas de antes de esta función no tienen
+  // el campo: se tratan como lista vacía en todos lados (nunca se les
+  // inventa ni rellena nada), y se normaliza a un arreglo real recién
+  // la primera vez que se le agrega un ingrediente.
+  function getMealIngredients(mealId) {
+    const meal = data.mealLibrary.find((m) => m.id === mealId);
+    return (meal && meal.ingredients) || [];
+  }
+
+  // Renglón: nombre (obligatorio) + cantidad/unidad (opcionales, texto
+  // libre — "cebolla" sin cantidad ni unidad es válido).
+  function addIngredient(mealId, { name, qty, unit } = {}) {
+    const trimmed = (name || "").trim();
+    if (!trimmed) return null;
+    const meal = data.mealLibrary.find((m) => m.id === mealId);
+    if (!meal) return null;
+    if (!Array.isArray(meal.ingredients)) meal.ingredients = [];
+    const ingredient = { id: uid("ing"), name: trimmed, qty: (qty || "").trim(), unit: (unit || "").trim() };
+    meal.ingredients.push(ingredient);
+    notify();
+    return ingredient;
+  }
+
+  function updateIngredient(mealId, ingredientId, fields) {
+    const meal = data.mealLibrary.find((m) => m.id === mealId);
+    const ingredient = meal && Array.isArray(meal.ingredients) && meal.ingredients.find((i) => i.id === ingredientId);
+    if (!ingredient) return;
+    if (fields.name !== undefined) ingredient.name = fields.name.trim();
+    if (fields.qty !== undefined) ingredient.qty = fields.qty.trim();
+    if (fields.unit !== undefined) ingredient.unit = fields.unit.trim();
+    // Editar nombre/cantidad/unidad mientras se escribe no redibuja
+    // (igual que updateMeal/setBlockText): solo persist(), nunca notify().
+    persist();
+  }
+
+  function removeIngredient(mealId, ingredientId) {
+    const meal = data.mealLibrary.find((m) => m.id === mealId);
+    if (!meal || !Array.isArray(meal.ingredients)) return;
+    meal.ingredients = meal.ingredients.filter((i) => i.id !== ingredientId);
+    notify();
+  }
+
+  // Reordenar: intercambia con el vecino de arriba (direction -1) o de
+  // abajo (+1); no hace nada si ya está en la punta de ese lado.
+  function moveIngredient(mealId, ingredientId, direction) {
+    const meal = data.mealLibrary.find((m) => m.id === mealId);
+    if (!meal || !Array.isArray(meal.ingredients)) return;
+    const idx = meal.ingredients.findIndex((i) => i.id === ingredientId);
+    const targetIdx = idx + direction;
+    if (idx === -1 || targetIdx < 0 || targetIdx >= meal.ingredients.length) return;
+    const [item] = meal.ingredients.splice(idx, 1);
+    meal.ingredients.splice(targetIdx, 0, item);
+    notify();
+  }
+
   // ---------- Comida (14:00-15:00, bloque "preparar_comida") ----------
   // Antes de elegir la comida del día, pregunta si se repite la de ayer
   // o si hoy se cocina algo (elegido del selector de siempre). La
@@ -2758,6 +2816,289 @@ window.Agenda = window.Agenda || {};
     persist();
   }
 
+  // ---------- Súper: lista de compras de la semana (pestaña Comidas) ----------
+  // Se arma con tres fuentes (ver getSuperList): los ingredientes de
+  // las recetas de Comida/Cena elegidas esa semana, los artículos de la
+  // despensa marcados "necesito esta semana" y los extras sueltos de
+  // esa semana. La despensa (catálogo) y el historial de extras viven
+  // globales (data.pantryItems/data.extrasHistory); lo que es propio de
+  // CADA semana (extras, casillas de comprado, "Ya tengo", qué de la
+  // despensa se necesita esa semana) vive en data.superWeeks[mondayStr]
+  // — igual que data.weekBlocks, cada semana nueva arranca vacía.
+
+  // Sin distinguir mayúsculas ni acentos, para comparar/unir nombres de
+  // ingredientes y artículos (despensa, historial de extras).
+  function normalizeIngredientName(name) {
+    return (name || "")
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[̀-ͯ]/g, "")
+      .trim();
+  }
+
+  function isNumericQty(q) {
+    return /^\d+(\.\d+)?$/.test((q || "").trim());
+  }
+
+  // Suma cantidades numéricas; si alguna no es numérica (o falta),
+  // conserva lo que haya en vez de perderlo.
+  function mergeQty(a, b) {
+    const aTrim = (a || "").trim();
+    const bTrim = (b || "").trim();
+    if (!aTrim) return bTrim;
+    if (!bTrim) return aTrim;
+    if (isNumericQty(aTrim) && isNumericQty(bTrim)) {
+      const sum = parseFloat(aTrim) + parseFloat(bTrim);
+      return String(Math.round(sum * 100) / 100);
+    }
+    if (aTrim === bTrim) return aTrim;
+    return `${aTrim} + ${bTrim}`;
+  }
+
+  function getSuperWeek(mondayStr) {
+    if (!data.superWeeks) data.superWeeks = {};
+    if (!data.superWeeks[mondayStr]) {
+      data.superWeeks[mondayStr] = { extras: [], pantryChecked: {}, bought: {}, hidden: {} };
+    }
+    const week = data.superWeeks[mondayStr];
+    if (!Array.isArray(week.extras)) week.extras = [];
+    if (!week.pantryChecked) week.pantryChecked = {};
+    if (!week.bought) week.bought = {};
+    if (!week.hidden) week.hidden = {};
+    return week;
+  }
+
+  // ---------- Despensa (catálogo global de básicos recurrentes) ----------
+  function getPantryItems() {
+    if (!data.pantryItems) data.pantryItems = [];
+    return data.pantryItems;
+  }
+
+  function addPantryItem(name) {
+    const trimmed = (name || "").trim();
+    if (!trimmed) return null;
+    const items = getPantryItems();
+    const existing = items.find((i) => normalizeIngredientName(i.name) === normalizeIngredientName(trimmed));
+    if (existing) return existing;
+    const item = { id: uid("pantry"), name: trimmed };
+    items.push(item);
+    notify();
+    return item;
+  }
+
+  function updatePantryItem(id, name) {
+    const trimmed = (name || "").trim();
+    if (!trimmed) return;
+    const item = getPantryItems().find((i) => i.id === id);
+    if (item) item.name = trimmed;
+    persist();
+  }
+
+  function removePantryItem(id) {
+    data.pantryItems = getPantryItems().filter((i) => i.id !== id);
+    notify();
+  }
+
+  function isPantryItemNeeded(mondayStr, pantryItemId) {
+    return !!getSuperWeek(mondayStr).pantryChecked[pantryItemId];
+  }
+
+  function setPantryItemNeeded(mondayStr, pantryItemId, needed) {
+    const week = getSuperWeek(mondayStr);
+    if (needed) week.pantryChecked[pantryItemId] = true;
+    else delete week.pantryChecked[pantryItemId];
+    notify();
+  }
+
+  // ---------- Extras de la semana + su historial ----------
+  function getWeekExtras(mondayStr) {
+    return getSuperWeek(mondayStr).extras;
+  }
+
+  function addWeekExtra(mondayStr, name, qty) {
+    const trimmed = (name || "").trim();
+    if (!trimmed) return null;
+    const extra = { id: uid("extra"), name: trimmed, qty: (qty || "").trim() };
+    getSuperWeek(mondayStr).extras.push(extra);
+    recordExtraHistory(trimmed, mondayStr);
+    notify();
+    return extra;
+  }
+
+  function removeWeekExtra(mondayStr, extraId) {
+    const week = getSuperWeek(mondayStr);
+    week.extras = week.extras.filter((e) => e.id !== extraId);
+    notify();
+  }
+
+  // Registra en qué semanas distintas se agregó cada extra (por nombre
+  // normalizado) — pura data, no agrega nada a la despensa por sí sola
+  // (ver getPantrySuggestions/acceptPantrySuggestion: eso es siempre una
+  // propuesta que hay que confirmar a mano).
+  function recordExtraHistory(name, mondayStr) {
+    if (!data.extrasHistory) data.extrasHistory = {};
+    const key = normalizeIngredientName(name);
+    if (!key) return;
+    const entry = data.extrasHistory[key] || { label: name, weeks: [], dismissed: false };
+    entry.label = name;
+    if (!entry.weeks.includes(mondayStr)) entry.weeks.push(mondayStr);
+    data.extrasHistory[key] = entry;
+  }
+
+  // Propuestas vigentes de "pasar a la despensa": 2+ semanas distintas,
+  // no descartadas antes, y que todavía no estén ya en la despensa.
+  function getPantrySuggestions() {
+    if (!data.extrasHistory) return [];
+    const pantryKeys = new Set(getPantryItems().map((i) => normalizeIngredientName(i.name)));
+    return Object.entries(data.extrasHistory)
+      .filter(([key, entry]) => !entry.dismissed && entry.weeks.length >= 2 && !pantryKeys.has(key))
+      .map(([key, entry]) => ({ key, label: entry.label }));
+  }
+
+  // "Sí": la agrega a la despensa (ver addPantryItem) y no vuelve a
+  // proponerla. "No" (dismissPantrySuggestion): no la agrega a nada,
+  // solo deja de proponerla para ese nombre.
+  function acceptPantrySuggestion(key) {
+    if (!data.extrasHistory || !data.extrasHistory[key]) return;
+    addPantryItem(data.extrasHistory[key].label);
+    data.extrasHistory[key].dismissed = true;
+    notify();
+  }
+
+  function dismissPantrySuggestion(key) {
+    if (!data.extrasHistory || !data.extrasHistory[key]) return;
+    data.extrasHistory[key].dismissed = true;
+    notify();
+  }
+
+  // Para autocompletar "Agregar artículo": nombres de la despensa +
+  // historial de extras, sin duplicar (por nombre normalizado).
+  function getExtraSuggestions() {
+    const seen = new Set();
+    const result = [];
+    getPantryItems().forEach((item) => {
+      const key = normalizeIngredientName(item.name);
+      if (seen.has(key)) return;
+      seen.add(key);
+      result.push(item.name);
+    });
+    Object.values(data.extrasHistory || {}).forEach((entry) => {
+      const key = normalizeIngredientName(entry.label);
+      if (seen.has(key)) return;
+      seen.add(key);
+      result.push(entry.label);
+    });
+    return result;
+  }
+
+  // ---------- Casillas de "ya comprado" y "Ya tengo" (por semana) ----------
+  // rowKey es estable por CONTENIDO (no por posición): "ing:<nombre
+  // normalizado>|<unidad>" para ingredientes, "pantry:<id>" y
+  // "extra:<id>" para despensa/extras — así, al elegir otra comida esa
+  // semana, los renglones que no cambiaron conservan su casilla (ver
+  // getSuperList).
+  function isSuperRowBought(mondayStr, rowKey) {
+    return !!getSuperWeek(mondayStr).bought[rowKey];
+  }
+
+  function toggleSuperRowBought(mondayStr, rowKey) {
+    const week = getSuperWeek(mondayStr);
+    if (week.bought[rowKey]) delete week.bought[rowKey];
+    else week.bought[rowKey] = true;
+    notify();
+  }
+
+  // "Ya tengo" (solo renglones de ingredientes de receta): lo saca de la
+  // lista de esa semana sin tocar nada más; unhideSuperRow es el
+  // "deshacer".
+  function hideSuperRow(mondayStr, rowKey) {
+    getSuperWeek(mondayStr).hidden[rowKey] = true;
+    notify();
+  }
+
+  function unhideSuperRow(mondayStr, rowKey) {
+    delete getSuperWeek(mondayStr).hidden[rowKey];
+    notify();
+  }
+
+  // ---------- Armado de la lista combinada ----------
+  // Recorre lunes a domingo de esa semana, junta (sin repetir) las
+  // recetas elegidas en Comida/Cena, suma sus ingredientes (por nombre
+  // normalizado + unidad) y agrega despensa marcada + extras de la
+  // semana. Devuelve también qué recetas elegidas no tienen ingredientes
+  // todavía, para el aviso "Faltan ingredientes en N recetas".
+  function getSuperList(mondayStr) {
+    const superWeek = getSuperWeek(mondayStr);
+    const rowsByKey = {};
+    const order = [];
+    const missingIngredientRecipes = [];
+    const seenRecipeNames = new Set();
+
+    ns.dateUtils.DAY_KEYS.forEach((dayKey) => {
+      const dateStr = dateForWeekday(mondayStr, dayKey);
+      ["preparar_comida", "cena"].forEach((blockId) => {
+        const mealName = (getBlockText(dateStr, blockId) || "").trim();
+        if (!mealName || seenRecipeNames.has(mealName)) return;
+        seenRecipeNames.add(mealName);
+        const meal = data.mealLibrary.find((m) => m.name === mealName);
+        const ingredients = (meal && meal.ingredients) || [];
+        if (ingredients.length === 0) {
+          missingIngredientRecipes.push(mealName);
+          return;
+        }
+        ingredients.forEach((ing) => {
+          const key = `ing:${normalizeIngredientName(ing.name)}|${(ing.unit || "").trim().toLowerCase()}`;
+          if (!rowsByKey[key]) {
+            rowsByKey[key] = { key, source: "ingredient", name: ing.name, qty: "", unit: ing.unit || "", origin: [] };
+            order.push(key);
+          }
+          const row = rowsByKey[key];
+          row.qty = mergeQty(row.qty, ing.qty || "");
+          if (!row.origin.includes(mealName)) row.origin.push(mealName);
+        });
+      });
+    });
+
+    const ingredientRows = order.map((key) => rowsByKey[key]).filter((row) => !superWeek.hidden[row.key]);
+
+    const pantryRows = getPantryItems()
+      .filter((item) => superWeek.pantryChecked[item.id])
+      .map((item) => ({ key: `pantry:${item.id}`, source: "pantry", name: item.name, qty: "", unit: "", origin: [] }));
+
+    const extraRows = superWeek.extras.map((extra) => ({
+      key: `extra:${extra.id}`,
+      source: "extra",
+      name: extra.name,
+      qty: extra.qty || "",
+      unit: "",
+      origin: [],
+    }));
+
+    const rows = [...ingredientRows, ...pantryRows, ...extraRows].map((row) => ({
+      ...row,
+      bought: !!superWeek.bought[row.key],
+    }));
+
+    return { rows, missingIngredientRecipes };
+  }
+
+  function formatSuperRowQty(row) {
+    return [row.qty, row.unit].filter(Boolean).join(" ").trim();
+  }
+
+  // Texto plano para "Copiar lista" (una línea por artículo, con
+  // cantidad si la hay, sin los ya comprados).
+  function buildSuperListText(mondayStr) {
+    const { rows } = getSuperList(mondayStr);
+    return rows
+      .filter((r) => !r.bought)
+      .map((row) => {
+        const qtyUnit = formatSuperRowQty(row);
+        return qtyUnit ? `${row.name} (${qtyUnit})` : row.name;
+      })
+      .join("\n");
+  }
+
   ns.state = {
     getHabitsDefs,
     getMealLibrary,
@@ -2765,6 +3106,30 @@ window.Agenda = window.Agenda || {};
     getMealLibraryGrouped,
     addMealCategory,
     setMealCategory,
+    getMealIngredients,
+    addIngredient,
+    updateIngredient,
+    removeIngredient,
+    moveIngredient,
+    getPantryItems,
+    addPantryItem,
+    updatePantryItem,
+    removePantryItem,
+    isPantryItemNeeded,
+    setPantryItemNeeded,
+    getWeekExtras,
+    addWeekExtra,
+    removeWeekExtra,
+    getPantrySuggestions,
+    acceptPantrySuggestion,
+    dismissPantrySuggestion,
+    getExtraSuggestions,
+    isSuperRowBought,
+    toggleSuperRowBought,
+    hideSuperRow,
+    unhideSuperRow,
+    getSuperList,
+    buildSuperListText,
     addMeal,
     getComidaAnswer,
     setComidaCocino,
