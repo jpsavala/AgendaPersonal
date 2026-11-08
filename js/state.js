@@ -1266,6 +1266,49 @@ window.Agenda = window.Agenda || {};
     });
   }
 
+  // Categorías de la librería de comidas: 3 de siempre (Pollo/Carnes/
+  // Mar, ver migrateMealCategories más abajo) más las que se agreguen
+  // con "+ Categoría" desde la pestaña Comidas (ver addMealCategory) —
+  // nunca se borran ni renombran acá, solo se agregan.
+  const DEFAULT_MEAL_CATEGORIES = [
+    { id: "pollo", name: "Pollo" },
+    { id: "carnes", name: "Carnes" },
+    { id: "mar", name: "Mar" },
+  ];
+
+  // Reglas simples por nombre para clasificar automáticamente una
+  // comida sin categoría (lo ya guardado antes de que existieran las
+  // categorías, ver migrateMealCategories, o lo que se agrega rápido
+  // desde el selector de Comida/Cena sin pasar por el selector de
+  // categoría de la pestaña Comidas). No busca ser exhaustivo: lo que
+  // no encaje en ninguna regla queda en "Sin categoría" (category:
+  // null) para que se le asigne a mano.
+  const CARNES_KEYWORDS = ["res", "carne", "bistec", "cerdo", "puerco", "molida", "boloñesa"];
+  const MAR_KEYWORDS = ["pescado", "camarón", "camaron", "atún", "atun", "salmón", "salmon", "mariscos"];
+
+  function classifyMealName(name) {
+    const lower = (name || "").toLowerCase();
+    if (lower.includes("pollo")) return "pollo";
+    if (CARNES_KEYWORDS.some((k) => lower.includes(k))) return "carnes";
+    if (MAR_KEYWORDS.some((k) => lower.includes(k))) return "mar";
+    return null;
+  }
+
+  // Siembra las 3 categorías de siempre la primera vez (si todavía no
+  // hay ninguna) y clasifica por nombre cualquier comida que no tenga
+  // category todavía (undefined: nunca pisa una ya puesta a mano, ni
+  // siquiera "Sin categoría" explícito, que queda guardado como null).
+  // Nunca borra ni renombra ninguna comida — solo le completa el campo
+  // category si le falta.
+  function migrateMealCategories() {
+    if (!Array.isArray(data.mealCategories) || data.mealCategories.length === 0) {
+      data.mealCategories = DEFAULT_MEAL_CATEGORIES.map((c) => ({ ...c }));
+    }
+    (data.mealLibrary || []).forEach((meal) => {
+      if (meal.category === undefined) meal.category = classifyMealName(meal.name);
+    });
+  }
+
   // Todas estas migraciones son idempotentes (cada una revisa su propia
   // bandera y no hace nada si ya corrió). Además de correr una vez al
   // cargar la app, se vuelven a correr cada vez que llega un estado
@@ -1291,6 +1334,7 @@ window.Agenda = window.Agenda || {};
     migrateWeekendRunDoneToBlocks();
     migrateRunQueueSeed();
     migratePrevioOficinaToParadas();
+    migrateMealCategories();
   }
   runMigrations();
   persist();
@@ -1364,17 +1408,64 @@ window.Agenda = window.Agenda || {};
     return data.mealLibrary;
   }
 
+  function getMealCategories() {
+    return data.mealCategories;
+  }
+
+  // Agrupa la librería por categoría, en el mismo orden que
+  // data.mealCategories (Pollo, Carnes, Mar y las agregadas después),
+  // con "Sin categoría" (category: null) al final. Lo usan tanto la
+  // pestaña Comidas (secciones colapsables) como los selectores de
+  // Comida/Cena de la Diaria y la Semanal (grupos del desplegable).
+  function getMealLibraryGrouped() {
+    const groups = data.mealCategories.map((cat) => ({ category: cat, meals: [] }));
+    const byId = {};
+    groups.forEach((g) => { byId[g.category.id] = g; });
+    const sinCategoria = { category: null, meals: [] };
+    data.mealLibrary.forEach((meal) => {
+      const group = (meal.category && byId[meal.category]) || sinCategoria;
+      group.meals.push(meal);
+    });
+    groups.push(sinCategoria);
+    return groups;
+  }
+
+  // Agrega una categoría nueva si no existe ya una con el mismo nombre
+  // (sin distinguir mayúsculas/minúsculas); nunca toca las existentes.
+  function addMealCategory(name) {
+    const trimmed = (name || "").trim();
+    if (!trimmed) return null;
+    const existing = data.mealCategories.find((c) => c.name.toLowerCase() === trimmed.toLowerCase());
+    if (existing) return existing;
+    const category = { id: uid("cat"), name: trimmed };
+    data.mealCategories.push(category);
+    notify();
+    return category;
+  }
+
   // Agrega una comida si no existe ya una con el mismo nombre (sin
   // distinguir mayúsculas/minúsculas) y devuelve la comida resultante.
-  function addMeal(name) {
+  // `category` es opcional: si se omite (p. ej. desde el "+ Agregar
+  // nueva..." del selector de Comida/Cena, que no tiene selector de
+  // categoría propio), se clasifica sola por nombre; pasar null a
+  // propósito (desde la pestaña Comidas, opción "Sin categoría") se
+  // respeta tal cual, sin clasificar.
+  function addMeal(name, category) {
     const trimmed = name.trim();
     if (!trimmed) return null;
     const existing = data.mealLibrary.find((m) => m.name.toLowerCase() === trimmed.toLowerCase());
     if (existing) return existing;
-    const meal = { id: uid("m"), name: trimmed };
+    const meal = { id: uid("m"), name: trimmed, category: category !== undefined ? category : classifyMealName(trimmed) };
     data.mealLibrary.push(meal);
     notify();
     return meal;
+  }
+
+  // Selector de categoría de una comida ya existente (pestaña Comidas).
+  function setMealCategory(id, categoryId) {
+    const meal = data.mealLibrary.find((m) => m.id === id);
+    if (meal) meal.category = categoryId || null;
+    notify();
   }
 
   // ---------- Comida (14:00-15:00, bloque "preparar_comida") ----------
@@ -2670,6 +2761,10 @@ window.Agenda = window.Agenda || {};
   ns.state = {
     getHabitsDefs,
     getMealLibrary,
+    getMealCategories,
+    getMealLibraryGrouped,
+    addMealCategory,
+    setMealCategory,
     addMeal,
     getComidaAnswer,
     setComidaCocino,

@@ -17,6 +17,7 @@ window.Agenda = window.Agenda || {};
       weeks: {},
       weekBlocks: {},
       mealLibrary: [],
+      mealCategories: [],
       events: {},
       yearGoals: {},
       monthMeta: {},

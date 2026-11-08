@@ -127,11 +127,19 @@ window.Agenda = window.Agenda || {};
       },
     });
     select.appendChild(el("option", { value: "" }, "— Elegir comida —"));
-    const library = state.getMealLibrary();
-    library.forEach((meal) => {
-      select.appendChild(el("option", { value: meal.name }, meal.name));
+    // Agrupada por categoría, mismo criterio que en la Diaria (ver
+    // js/dailyView.js: buildMealSelector / state.getMealLibraryGrouped).
+    let matchedCurrent = false;
+    state.getMealLibraryGrouped().forEach((group) => {
+      if (!group.meals.length) return;
+      const optgroup = el("optgroup", { label: group.category ? group.category.name : "Sin categoría" });
+      group.meals.forEach((meal) => {
+        optgroup.appendChild(el("option", { value: meal.name }, meal.name));
+        if (meal.name === currentText) matchedCurrent = true;
+      });
+      select.appendChild(optgroup);
     });
-    if (currentText && !library.some((m) => m.name === currentText)) {
+    if (currentText && !matchedCurrent) {
       select.appendChild(el("option", { value: currentText }, currentText));
     }
     select.appendChild(el("option", { value: ADD_NEW_MEAL_VALUE }, "+ Agregar nueva..."));

@@ -660,10 +660,12 @@ h2, h3, h4 {
   display: flex;
   align-items: center;
   gap: 0.5rem;
+  flex-wrap: wrap;
 }
 
 .meal-name-input {
-  flex: 1;
+  flex: 1 1 140px;
+  min-width: 0;
   padding: 0.5rem 0.6rem;
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -676,6 +678,61 @@ h2, h3, h4 {
 .meal-name-input:focus {
   outline: none;
   border-color: var(--accent-green);
+}
+
+.meal-category-select {
+  flex: 0 1 auto;
+  max-width: 100%;
+}
+
+/* Secciones colapsables de la pestaña Comidas (ver js/mealsView.js):
+   una por categoría, todas arrancan suprimidas. El encabezado es el
+   botón completo (toda el área, no solo la flechita) para que tocar en
+   cualquier parte del renglón despliegue/colapse esa sección sola. */
+.meal-category-section {
+  margin-bottom: 0.7rem;
+}
+
+.meal-category-section:last-child {
+  margin-bottom: 0;
+}
+
+.meal-category-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+  width: 100%;
+  min-height: 44px;
+  padding: 0.5rem 0.7rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-family: var(--font-sans);
+  cursor: pointer;
+  text-align: left;
+}
+
+.meal-category-head:hover {
+  border-color: var(--accent-green);
+}
+
+.meal-category-title {
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.meal-category-arrow {
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.meal-category-empty {
+  margin: 0.5rem 0 0;
+}
+
+.meal-category-section .meal-list {
+  margin-top: 0.5rem;
 }
 
 .schedule-marker {
