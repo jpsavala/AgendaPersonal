@@ -3,8 +3,14 @@ window.Agenda = window.Agenda || {};
   const { state, dateUtils } = ns;
   let currentDate = new Date();
   const MEAL_BLOCK_ID = "preparar_comida";
+  // Cena (20:00-21:00): mismo criterio que Comida (ver buildCenaBlock),
+  // independiente de ella — cada una guarda su propia respuesta/valor.
+  const CENA_BLOCK_ID = "cena";
   const ADD_NEW_MEAL_VALUE = "__add_new__";
-  let addingMeal = false;
+  // Id del bloque (comida o cena) cuyo selector tiene abierto el
+  // formulario de "agregar nueva" en este momento, o null — así los dos
+  // selectores pueden tener su propio "agregar nueva" sin pisarse.
+  let addingMealFor = null;
   // Id de la parada que se está editando en este momento (su texto pasa
   // a un campo editable con Guardar/Cancelar, ver buildParadasList) —
   // misma idea que editingGymDate/editingRunDate más abajo.
@@ -15,6 +21,8 @@ window.Agenda = window.Agenda || {};
   // registrada" junto al selector normal. Se limpia sola al elegir una
   // comida, al tocar "Cambiar" o al cambiar de fecha.
   let comidaRepeatWarningFor = null;
+  // Misma idea que comidaRepeatWarningFor, para la cena.
+  let cenaRepeatWarningFor = null;
 
   // ---------- Diaria de hoy: bloque en curso, colapso de lo ya pasado ----------
   // Todo esto solo aplica al día de HOY (ver isToday en render()); en
@@ -126,7 +134,7 @@ window.Agenda = window.Agenda || {};
   // acá porque ya tiene su propio control "¿Entrenaste hoy?"/
   // "Corregir" (ver block.gymStatus/buildGymExtras), nunca esta
   // casilla genérica. Los bloques excluidos (Meditar/leer, Oficina,
-  // Comida, Comer/lavar platos y bloque personal, Cena y bañarme,
+  // Comida, Comer/lavar platos y bloque personal, Cena, Bañarme,
   // Bloque libre, Mañana/Tarde/Noche del fin de semana, bloques
   // personales configurados) conservan su dato guardado (day.blocks[
   // id].done) intacto en data — solo dejan de mostrarse y de poder
@@ -514,20 +522,20 @@ window.Agenda = window.Agenda || {};
     return null; // "projected": todavía no llega, sin acción posible
   }
 
-  function buildMealSelector(dateStr, currentText) {
-    if (addingMeal) {
+  function buildMealSelector(dateStr, currentText, blockId, onPicked) {
+    if (addingMealFor === blockId) {
       const input = el("input", { type: "text", class: "add-input", placeholder: "Nombre de la comida nueva..." });
       const commit = () => {
         if (input.value.trim()) {
           state.addMeal(input.value);
-          state.setBlockText(dateStr, MEAL_BLOCK_ID, input.value.trim());
-          comidaRepeatWarningFor = null;
+          state.setBlockText(dateStr, blockId, input.value.trim());
+          onPicked();
         }
-        addingMeal = false;
+        addingMealFor = null;
         render(containerRef);
       };
       const cancel = () => {
-        addingMeal = false;
+        addingMealFor = null;
         render(containerRef);
       };
       input.addEventListener("keydown", (e) => {
@@ -548,14 +556,14 @@ window.Agenda = window.Agenda || {};
       onchange: (e) => {
         const val = e.target.value;
         if (val === ADD_NEW_MEAL_VALUE) {
-          addingMeal = true;
+          addingMealFor = blockId;
           render(containerRef);
           const input = containerRef.querySelector(".add-input");
           if (input) input.focus();
           return;
         }
-        state.setBlockText(dateStr, MEAL_BLOCK_ID, val);
-        comidaRepeatWarningFor = null;
+        state.setBlockText(dateStr, blockId, val);
+        onPicked();
         render(containerRef);
       },
     });
@@ -572,24 +580,27 @@ window.Agenda = window.Agenda || {};
     return select;
   }
 
-  // Bloque "preparar_comida" (14:00-15:00): antes de mostrar el selector
-  // de siempre, pregunta "¿Se repite la comida de ayer?" por fecha (ver
-  // state.getComidaAnswer). Tres estados posibles:
+  // Bloques "preparar_comida" (14:00-15:00) y "cena" (20:00-21:00):
+  // antes de mostrar el selector de siempre, preguntan "¿Se repite la
+  // comida/cena de ayer?" por fecha (ver state.getComidaAnswer/
+  // getCenaAnswer) — comida y cena son independientes, cada una con su
+  // propia pregunta/respuesta/valor, por eso esta función recibe en cfg
+  // cuál de las dos está armando. Tres estados posibles:
   // - Sin responder: la pregunta con "Se repite"/"Cocino".
   // - "repite": el texto copiado, de solo lectura, con "Cambiar".
   // - "cocino": el selector completo de siempre (buildMealSelector),
-  //   con "Cambiar" al lado — y el aviso "Ayer no hay comida
+  //   con "Cambiar" al lado — y el aviso "Ayer no hay comida/cena
   //   registrada" si llegó acá porque "Se repite" no tenía nada que
-  //   copiar (ver comidaRepeatWarningFor).
-  function buildComidaBlock(dateStr, currentText) {
-    const answer = state.getComidaAnswer(dateStr);
+  //   copiar.
+  function buildRepeatableMealBlock(dateStr, currentText, cfg) {
+    const answer = cfg.getAnswer(dateStr);
     const changeLink = el(
       "button",
       {
         class: "link-btn",
         onclick: () => {
-          state.clearComidaAnswer(dateStr);
-          comidaRepeatWarningFor = null;
+          cfg.clearAnswer(dateStr);
+          cfg.setWarningFor(null);
           render(containerRef);
         },
       },
@@ -600,7 +611,7 @@ window.Agenda = window.Agenda || {};
       return el(
         "div",
         { class: "comida-pregunta" },
-        el("p", null, "¿Se repite la comida de ayer?"),
+        el("p", null, cfg.questionText),
         el(
           "div",
           { class: "gym-actions" },
@@ -609,8 +620,8 @@ window.Agenda = window.Agenda || {};
             {
               class: "btn-secondary",
               onclick: () => {
-                const copied = state.repeatYesterdayComida(dateStr);
-                comidaRepeatWarningFor = copied ? null : dateStr;
+                const copied = cfg.repeatYesterday(dateStr);
+                cfg.setWarningFor(copied ? null : dateStr);
                 render(containerRef);
               },
             },
@@ -621,7 +632,7 @@ window.Agenda = window.Agenda || {};
             {
               class: "btn-primary",
               onclick: () => {
-                state.setComidaCocino(dateStr);
+                cfg.setCocino(dateStr);
                 render(containerRef);
               },
             },
@@ -638,10 +649,38 @@ window.Agenda = window.Agenda || {};
     return el(
       "div",
       { class: "comida-cocino" },
-      comidaRepeatWarningFor === dateStr ? el("p", { class: "muted comida-warning" }, "Ayer no hay comida registrada") : null,
-      buildMealSelector(dateStr, currentText),
+      cfg.getWarningFor() === dateStr ? el("p", { class: "muted comida-warning" }, cfg.warningText) : null,
+      buildMealSelector(dateStr, currentText, cfg.blockId, () => cfg.setWarningFor(null)),
       changeLink
     );
+  }
+
+  function buildComidaBlock(dateStr, currentText) {
+    return buildRepeatableMealBlock(dateStr, currentText, {
+      blockId: MEAL_BLOCK_ID,
+      questionText: "¿Se repite la comida de ayer?",
+      warningText: "Ayer no hay comida registrada",
+      getAnswer: state.getComidaAnswer,
+      setCocino: state.setComidaCocino,
+      repeatYesterday: state.repeatYesterdayComida,
+      clearAnswer: state.clearComidaAnswer,
+      getWarningFor: () => comidaRepeatWarningFor,
+      setWarningFor: (v) => { comidaRepeatWarningFor = v; },
+    });
+  }
+
+  function buildCenaBlock(dateStr, currentText) {
+    return buildRepeatableMealBlock(dateStr, currentText, {
+      blockId: CENA_BLOCK_ID,
+      questionText: "¿Se repite la cena de ayer?",
+      warningText: "Ayer no hay cena registrada",
+      getAnswer: state.getCenaAnswer,
+      setCocino: state.setCenaCocino,
+      repeatYesterday: state.repeatYesterdayCena,
+      clearAnswer: state.clearCenaAnswer,
+      getWarningFor: () => cenaRepeatWarningFor,
+      setWarningFor: (v) => { cenaRepeatWarningFor = v; },
+    });
   }
 
   function render(container) {
@@ -662,11 +701,12 @@ window.Agenda = window.Agenda || {};
         value: dateStr,
         onchange: (e) => {
           currentDate = dateUtils.fromISO(e.target.value);
-          addingMeal = false;
+          addingMealFor = null;
           editingGymDate = null;
           editingRunDate = null;
           editingParadaId = null;
           comidaRepeatWarningFor = null;
+          cenaRepeatWarningFor = null;
           manuallyExpandedBlockIds = new Set();
           renderWithTransition(container);
         },
@@ -676,11 +716,12 @@ window.Agenda = window.Agenda || {};
         class: "btn-secondary",
         onclick: () => {
           currentDate = new Date();
-          addingMeal = false;
+          addingMealFor = null;
           editingGymDate = null;
           editingRunDate = null;
           editingParadaId = null;
           comidaRepeatWarningFor = null;
+          cenaRepeatWarningFor = null;
           manuallyExpandedBlockIds = new Set();
           renderWithTransition(container);
         },
@@ -873,6 +914,8 @@ window.Agenda = window.Agenda || {};
           ? (block.text ? el("p", { class: "schedule-readonly-text" }, block.gymDiariaText || block.text) : null)
           : block.id === MEAL_BLOCK_ID
           ? buildComidaBlock(dateStr, block.text)
+          : block.id === CENA_BLOCK_ID
+          ? buildCenaBlock(dateStr, block.text)
           : el("input", {
               type: "text",
               class: "schedule-input",
@@ -1221,11 +1264,12 @@ window.Agenda = window.Agenda || {};
   let containerRef = null;
   function go(delta) {
     currentDate = dateUtils.addDays(currentDate, delta);
-    addingMeal = false;
+    addingMealFor = null;
     editingGymDate = null;
     editingRunDate = null;
     editingParadaId = null;
     comidaRepeatWarningFor = null;
+    cenaRepeatWarningFor = null;
     manuallyExpandedBlockIds = new Set();
     if (containerRef) renderWithTransition(containerRef);
   }

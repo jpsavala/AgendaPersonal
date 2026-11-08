@@ -1185,6 +1185,27 @@ window.Agenda = window.Agenda || {};
     settingsOverlay = null;
   }
 
+  // Corrección puntual del bloque de cena: el horario migrado en su
+  // momento (ver js/userConfig.js: buildMigratedOwnerConfig) tenía un
+  // solo bloque fijo "Cenar y bañarme" (20:00–21:20). Ahora "Cena"
+  // (20:00–21:00) tiene su propia pregunta (igual que "Comida") y
+  // "Bañarme" (21:00–21:20) queda como bloque fijo aparte, sin mover
+  // "Bloque libre" (21:30–22:10). Corre en cada carga de una
+  // configuración YA guardada (no solo en la migración inicial, que
+  // para esta cuenta ya pasó hace rato) — idempotente: si ya tiene
+  // "banarme", no toca nada. Guarda la corrección de vuelta en
+  // Firestore para no tener que repetirla cada vez.
+  function correctDinnerBlock(cfg) {
+    const fixedEnd = cfg && cfg.scheduleDefs && cfg.scheduleDefs.fixedEnd;
+    if (!Array.isArray(fixedEnd)) return false;
+    if (fixedEnd.some((b) => b.id === "banarme")) return false;
+    const idx = fixedEnd.findIndex((b) => b.id === "cena");
+    if (idx === -1) return false;
+    fixedEnd[idx] = { id: "cena", time: "20:00–21:00", label: "Cena" };
+    fixedEnd.splice(idx + 1, 0, { id: "banarme", time: "21:00–21:20", label: "Bañarme", fixed: true });
+    return true;
+  }
+
   // ---------- Carga al iniciar sesión ----------
   function handleSignedIn(user) {
     uid = user.uid;
@@ -1195,6 +1216,11 @@ window.Agenda = window.Agenda || {};
           const cfg = snap.data();
           if (cfg.onboarding && cfg.onboarding.complete) {
             closeOnboarding();
+            if (correctDinnerBlock(cfg)) {
+              docRef(uid)
+                .set(cfg)
+                .catch((err) => console.error("No se pudo guardar la corrección del bloque de cena:", err));
+            }
             applyConfig(cfg);
           } else {
             openOnboarding(cfg.profile, cfg.onboarding && cfg.onboarding.step);

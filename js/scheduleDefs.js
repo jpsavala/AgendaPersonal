@@ -45,7 +45,12 @@ window.Agenda = window.Agenda || {};
 
   const FIXED_END = [
     { id: "correr", time: "19:00–20:00", label: "Correr" },
-    { id: "cena", time: "20:00–21:20", label: "Cenar y bañarme", fixed: true },
+    // "Cena" ya no es fijo: mismo criterio que "Comida" (ver
+    // js/dailyView.js: buildCenaBlock) — pregunta "¿Se repite la cena
+    // de ayer?" antes del selector. "Bañarme" sigue fijo (sin texto ni
+    // casilla) para no perder esos 20 minutos del horario.
+    { id: "cena", time: "20:00–21:00", label: "Cena" },
+    { id: "banarme", time: "21:00–21:20", label: "Bañarme", fixed: true },
     { id: "libre_noche", time: "21:30–22:10", label: "Bloque libre" },
   ];
 

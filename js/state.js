@@ -1425,6 +1425,52 @@ window.Agenda = window.Agenda || {};
     return true;
   }
 
+  // ---------- Cena (20:00-21:00, bloque "cena") ----------
+  // Mismo criterio que Comida (ver arriba), en su propio campo
+  // (day.cenaRespuesta) y mirando SU propio bloque ("cena", no
+  // "preparar_comida"): comida y cena son independientes entre sí, cada
+  // una con su propia pregunta/respuesta/valor — "Se repite" en cena
+  // copia la cena de ayer, nunca la comida. También independiente del
+  // toggle "día que cocino" (day.cocina).
+  const CENA_BLOCK_ID = "cena";
+
+  function getCenaAnswer(dateStr) {
+    const day = data.days[dateStr];
+    if (day && day.cenaRespuesta === "pending") return undefined;
+    if (day && day.cenaRespuesta) return day.cenaRespuesta;
+    if (getBlockText(dateStr, CENA_BLOCK_ID)) return "cocino";
+    return undefined;
+  }
+
+  function setCenaCocino(dateStr) {
+    getDay(dateStr).cenaRespuesta = "cocino";
+    notify();
+  }
+
+  // "Se repite": copia el VALOR (no vincula los días) de la cena del
+  // día natural anterior. Devuelve true si copió algo; false si ayer no
+  // tenía nada elegido (en ese caso igual queda en "Cocino", para que la
+  // vista muestre el selector normal en vez de quedarse sin salida).
+  function repeatYesterdayCena(dateStr) {
+    const prevDateStr = toISO(ns.dateUtils.addDays(ns.dateUtils.fromISO(dateStr), -1));
+    const prevCena = getBlockText(prevDateStr, CENA_BLOCK_ID);
+    if (!prevCena) {
+      getDay(dateStr).cenaRespuesta = "cocino";
+      notify();
+      return false;
+    }
+    setBlockText(dateStr, CENA_BLOCK_ID, prevCena);
+    getDay(dateStr).cenaRespuesta = "repite";
+    notify();
+    return true;
+  }
+
+  // Enlace "Cambiar": vuelve a la pregunta sin responder.
+  function clearCenaAnswer(dateStr) {
+    getDay(dateStr).cenaRespuesta = "pending";
+    notify();
+  }
+
   // Enlace "Cambiar": vuelve a la pregunta sin responder.
   function clearComidaAnswer(dateStr) {
     getDay(dateStr).comidaRespuesta = "pending";
@@ -1965,12 +2011,16 @@ window.Agenda = window.Agenda || {};
     // getComidaAnswer, en vez de quedar tapada por un "pending"/
     // "repite"/"cocino" viejo de antes de replicar.
     const oldComidaRespuestas = {};
+    // Cena: mismo criterio que comida arriba (se limpia en la semana
+    // destino para que la cena recién copiada se vea sola).
+    const oldCenaRespuestas = {};
     REPLICATE_WEEKDAY_KEYS.forEach((dayKey) => {
       const targetDateStr = dateForWeekday(mondayStr, dayKey);
       const prevDateStr = dateForWeekday(prevMondayStr, dayKey);
       oldRespuestas[dayKey] = (data.days[targetDateStr] && data.days[targetDateStr].previoOficinaRespuesta) || null;
       newRespuestas[dayKey] = (data.days[prevDateStr] && data.days[prevDateStr].previoOficinaRespuesta) || null;
       oldComidaRespuestas[dayKey] = (data.days[targetDateStr] && data.days[targetDateStr].comidaRespuesta) || null;
+      oldCenaRespuestas[dayKey] = (data.days[targetDateStr] && data.days[targetDateStr].cenaRespuesta) || null;
     });
 
     // Respaldo para "Deshacer réplica" (ver undoReplicateWeek): guarda
@@ -1986,6 +2036,7 @@ window.Agenda = window.Agenda || {};
       paradas: JSON.parse(JSON.stringify(getWeek(mondayStr).paradasAntesOficina)),
       previoOficinaRespuestas: oldRespuestas,
       comidaRespuestas: oldComidaRespuestas,
+      cenaRespuestas: oldCenaRespuestas,
       replicatedAt: Date.now(),
     };
 
@@ -1998,6 +2049,7 @@ window.Agenda = window.Agenda || {};
       if (answer) getDay(targetDateStr).previoOficinaRespuesta = answer;
       else if (data.days[targetDateStr]) delete data.days[targetDateStr].previoOficinaRespuesta;
       if (data.days[targetDateStr]) delete data.days[targetDateStr].comidaRespuesta;
+      if (data.days[targetDateStr]) delete data.days[targetDateStr].cenaRespuesta;
     });
     notify();
   }
@@ -2040,6 +2092,14 @@ window.Agenda = window.Agenda || {};
         const answer = backup.comidaRespuestas[dayKey];
         if (answer) getDay(targetDateStr).comidaRespuesta = answer;
         else if (data.days[targetDateStr]) delete data.days[targetDateStr].comidaRespuesta;
+      });
+    }
+    if (backup.cenaRespuestas) {
+      REPLICATE_WEEKDAY_KEYS.forEach((dayKey) => {
+        const targetDateStr = dateForWeekday(mondayStr, dayKey);
+        const answer = backup.cenaRespuestas[dayKey];
+        if (answer) getDay(targetDateStr).cenaRespuesta = answer;
+        else if (data.days[targetDateStr]) delete data.days[targetDateStr].cenaRespuesta;
       });
     }
     delete data.weekReplicateBackups[mondayStr];
@@ -2615,6 +2675,10 @@ window.Agenda = window.Agenda || {};
     setComidaCocino,
     repeatYesterdayComida,
     clearComidaAnswer,
+    getCenaAnswer,
+    setCenaCocino,
+    repeatYesterdayCena,
+    clearCenaAnswer,
     updateMeal,
     removeMeal,
     addHabit,
