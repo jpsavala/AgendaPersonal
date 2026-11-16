@@ -101,18 +101,87 @@ window.Agenda = window.Agenda || {};
     return db.collection("agendas").doc(uid);
   }
 
+  // Freno de seguridad contra el caso real que motivó esto: "último que
+  // guarda, gana" (ver el comentario de arriba del archivo) deja que
+  // CUALQUIER dispositivo con una copia vieja o incompleta — uno que no
+  // se abría hacía semanas, o que nunca llegó a bajar el documento
+  // completo la primera vez — le gane a datos mucho más ricos solo por
+  // guardar más tarde, borrando ese contenido para siempre sin ningún
+  // aviso (reporte real: solo quedó la Semana 3 de Gimnasio, se
+  // perdieron la 1 y la 2). JSON.stringify(...).length es un indicador
+  // tosco pero deliberadamente genérico (no sabe nada de comidas,
+  // hábitos, etc.) de "cuánto hay guardado" — si lo que está por entrar
+  // (de la nube hacia este dispositivo, o de este dispositivo hacia la
+  // nube) es mucho más chico que lo que ya había y ese "ya había" no es
+  // casi nada (cuenta nueva), no se acepta: se frena todo (estado
+  // "conflict", ver index.html) en vez de adivinar cuál copia es la
+  // correcta.
+  const SHRINK_GUARD_MIN_SIZE = 2000;
+  const SHRINK_GUARD_RATIO = 0.5;
+
+  // Segunda señal, específica de gimnasio/corrida (lo que realmente se
+  // perdió en el caso real): cuenta días de entrenamiento con algo
+  // registrado (data.gymBlocks[n].weeks) más resoluciones "hecho/no
+  // realizado" (gymBlocks[n].resolutions + runQueue.resolutions). Hace
+  // falta aparte del tamaño en bytes de arriba porque la definición
+  // fija de cada bloque (rutina, nombres de día — igual en cualquier
+  // copia de la misma cuenta, nunca cambia con el uso real) pesa varios
+  // KB constantes que diluyen justo la diferencia que importa detectar
+  // (semanas de peso/reps perdidas) en una comparación de bytes nomás.
+  const GYM_GUARD_MIN_DAYS = 3;
+
+  function countGymRunHistoryDays(payload) {
+    let count = 0;
+    const gymBlocks = (payload && payload.gymBlocks) || {};
+    Object.values(gymBlocks).forEach((block) => {
+      const weeks = (block && block.weeks) || {};
+      Object.values(weeks).forEach((week) => { count += Object.keys(week || {}).length; });
+      count += Object.keys((block && block.resolutions) || {}).length;
+    });
+    const runQueue = (payload && payload.runQueue) || {};
+    count += Object.keys(runQueue.resolutions || {}).length;
+    return count;
+  }
+
+  function isSuspiciousShrink(incomingPayload, currentPayload) {
+    const currentSize = JSON.stringify(currentPayload || {}).length;
+    const incomingSize = JSON.stringify(incomingPayload || {}).length;
+    if (currentSize >= SHRINK_GUARD_MIN_SIZE && incomingSize < currentSize * SHRINK_GUARD_RATIO) return true;
+
+    const currentGymDays = countGymRunHistoryDays(currentPayload);
+    const incomingGymDays = countGymRunHistoryDays(incomingPayload);
+    if (currentGymDays >= GYM_GUARD_MIN_DAYS && incomingGymDays < currentGymDays * SHRINK_GUARD_RATIO) return true;
+
+    return false;
+  }
+
+  // Antes de subir, vuelve a leer lo que haya en la nube AHORA MISMO
+  // (no lo que este dispositivo recuerde de su última sincronización)
+  // y lo compara con lo local — así protege tanto "este dispositivo
+  // sube algo de menos" como "la nube ya tiene algo de menos que este
+  // dispositivo no sabía".
   function pushNow() {
     if (!db || !uid) return;
-    const ts = Date.now();
-    // Se guarda ANTES de escribir para que el eco del propio snapshot
-    // (onSnapshot dispara también con la escritura local optimista) no
-    // se interprete como un cambio remoto más nuevo.
-    setLocalUpdatedAt(ts);
     const payload = ns.state.getRawData();
     setStatus("syncing");
     docRef()
-      .set({ payload, updatedAt: ts })
-      .then(() => setStatus("synced"))
+      .get()
+      .then((snap) => {
+        const remotePayload = snap.exists ? snap.data().payload : null;
+        if (isSuspiciousShrink(payload, remotePayload)) {
+          setStatus("conflict");
+          return;
+        }
+        const ts = Date.now();
+        // Se guarda ANTES de escribir para que el eco del propio
+        // snapshot (onSnapshot dispara también con la escritura local
+        // optimista) no se interprete como un cambio remoto más nuevo
+        // — pero solo llegados a este punto, nunca si se frenó arriba.
+        setLocalUpdatedAt(ts);
+        return docRef()
+          .set({ payload, updatedAt: ts })
+          .then(() => setStatus("synced"));
+      })
       .catch((err) => {
         console.error("No se pudo guardar en Firebase:", err);
         setStatus("error");
@@ -126,11 +195,22 @@ window.Agenda = window.Agenda || {};
     pushTimer = setTimeout(pushNow, PUSH_DEBOUNCE_MS);
   }
 
+  // Antes de aceptar un documento remoto como la verdad nueva (más
+  // nuevo por updatedAt no significa necesariamente más completo, ver
+  // el freno de arriba), lo compara contra lo que este dispositivo
+  // tiene AHORA en memoria. Devuelve false (y deja todo tal cual,
+  // estado "conflict") si el remoto es sospechosamente más chico —
+  // nunca lo aplica a ciegas.
   function applyRemote(remote) {
+    if (isSuspiciousShrink(remote.payload, ns.state.getRawData())) {
+      setStatus("conflict");
+      return false;
+    }
     applyingRemote = true;
     ns.state.replaceAllData(remote.payload);
     applyingRemote = false;
     setLocalUpdatedAt(remote.updatedAt || 0);
+    return true;
   }
 
   function listenRemote() {
@@ -139,8 +219,7 @@ window.Agenda = window.Agenda || {};
         if (!snap.exists) return;
         const remote = snap.data();
         if ((remote.updatedAt || 0) <= getLocalUpdatedAt()) return;
-        applyRemote(remote);
-        setStatus("synced");
+        if (applyRemote(remote)) setStatus("synced");
       },
       (err) => {
         console.error("Error al escuchar cambios remotos de Firebase:", err);
@@ -156,11 +235,12 @@ window.Agenda = window.Agenda || {};
       .get()
       .then((snap) => {
         const localTs = getLocalUpdatedAt();
+        let conflict = false;
         if (snap.exists) {
           const remote = snap.data();
           const remoteTs = remote.updatedAt || 0;
           if (remoteTs > localTs) {
-            applyRemote(remote);
+            conflict = !applyRemote(remote);
           } else if (localTs > remoteTs) {
             pushNow();
           }
@@ -170,7 +250,10 @@ window.Agenda = window.Agenda || {};
         }
         listenRemote();
         ns.state.onPersist(schedulePush);
-        setStatus("synced");
+        // Si applyRemote frenó por "conflict", no lo tapa con "synced" —
+        // pushNow() (async) termina de decidir su propio estado final
+        // solo; acá nunca hace falta pisarlo.
+        if (!conflict) setStatus("synced");
       })
       .catch((err) => {
         console.error("No se pudo leer el estado inicial de Firebase:", err);

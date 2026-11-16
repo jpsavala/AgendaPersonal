@@ -225,6 +225,41 @@ header.app-header {
   border-color: var(--accent-gold);
 }
 
+.sync-status.conflict {
+  color: #a3403a;
+  border-color: #a3403a;
+  font-weight: 700;
+}
+
+/* Aviso de "conflict" (ver js/firebaseSync.js: isSuspiciousShrink) —
+   mismo lugar y forma que .connection-retry-banner, pero en el tono de
+   advertencia más fuerte (no es solo "no hay conexión", es "podríamos
+   estar a punto de perder datos") y sin botón "Reintentar": recargar
+   no resuelve nada acá, hace falta decidir a mano. */
+.sync-conflict-banner {
+  position: fixed;
+  left: 50%;
+  bottom: 5.5rem;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  background: var(--surface);
+  border: 2px solid #a3403a;
+  color: var(--text-primary);
+  border-radius: 10px;
+  padding: 0.7rem 0.9rem;
+  font-size: 0.82rem;
+  font-family: var(--font-sans);
+  z-index: 100;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.25);
+  width: min(92vw, 420px);
+}
+
+.sync-conflict-banner strong {
+  color: #a3403a;
+}
+
 nav.tabs {
   display: flex;
   gap: 0.4rem;

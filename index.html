@@ -131,6 +131,7 @@
         synced: "Sincronizado",
         error: "Sin conexión, datos locales",
         "signed-out": "Iniciar sesión para sincronizar",
+        conflict: "Sincronización pausada",
       };
       function render(status) {
         el.textContent = labels[status] || "";
@@ -196,6 +197,34 @@
         const status = sync.getStatus();
         if (status === "connecting" || status === "error") showRetryBanner();
       }, 5000);
+
+      // "conflict" (ver js/firebaseSync.js: isSuspiciousShrink): este
+      // dispositivo y la nube tienen cantidades de datos muy distintas
+      // — para no arriesgar a perder nada, la sincronización se frenó
+      // sola en vez de sobrescribir cualquiera de las dos copias.
+      // Nunca se cierra sola (a diferencia del aviso de conexión, que
+      // se resuelve solo cuando vuelve la red): hace falta revisarlo a
+      // mano, así que el aviso se queda hasta que el estado cambie a
+      // otra cosa.
+      function showConflictBanner() {
+        if (document.getElementById("sync-conflict-banner")) return;
+        const banner = document.createElement("div");
+        banner.id = "sync-conflict-banner";
+        banner.className = "sync-conflict-banner";
+        banner.innerHTML =
+          "<strong>Sincronización pausada.</strong>" +
+          "<span>Este dispositivo y la nube tienen cantidades de datos muy distintas (por ejemplo, un dispositivo que no se abría hacía tiempo). Para no perder nada, no se sobrescribió ninguna de las dos copias. Tus datos acá siguen intactos — no toques \"Corregir\" ni vuelvas a marcar nada hasta resolverlo.</span>";
+        document.body.appendChild(banner);
+      }
+      function hideConflictBanner() {
+        const banner = document.getElementById("sync-conflict-banner");
+        if (banner && banner.parentNode) banner.parentNode.removeChild(banner);
+      }
+      sync.onStatusChange((status) => {
+        if (status === "conflict") showConflictBanner();
+        else hideConflictBanner();
+      });
+      if (sync.getStatus() === "conflict") showConflictBanner();
     })();
   </script>
 
