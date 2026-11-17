@@ -792,6 +792,10 @@ window.Agenda = window.Agenda || {};
     const todayLocation = state.getGymSessionLocation(today);
 
     const meta = state.getGymBlockMeta(currentBlockNumber);
+    // Si el bloque tiene menos semanas que las que se recordaban de
+    // otro bloque (ver weekCount/getGymBlockMeta), no se queda en una
+    // pestaña que ya no existe.
+    if (currentWeek > meta.weekCount) currentWeek = meta.weekCount;
 
     const header = el(
       "div",
@@ -800,20 +804,24 @@ window.Agenda = window.Agenda || {};
       el(
         "div",
         { class: "toggle-group gym-block-selector" },
-        blockNumbers.map((n) =>
+        state.getVisibleGymBlockNumbers().map((n) =>
           el(
             "button",
             { class: "toggle-btn" + (n === currentBlockNumber ? " active" : ""), onclick: () => setBlock(n) },
-            `Bloque ${n}`
+            (state.getGymBlockMeta(n) || {}).label || `Bloque ${n}`
           )
         )
       )
     );
 
+    // Solo tantas pestañas "Semana N" como el bloque realmente tenga
+    // (ver meta.weekCount): los bloques de una sola ronda (Bloque SP 1,
+    // S2) no muestran semanas 2-4 que nunca se van a usar.
+    const weekNumbers = Array.from({ length: meta.weekCount }, (_, i) => i + 1);
     const weekTabs = el(
       "div",
       { class: "toggle-group gym-week-tabs" },
-      [1, 2, 3, 4].map((w) =>
+      weekNumbers.map((w) =>
         el("button", { class: "toggle-btn" + (w === currentWeek ? " active" : ""), onclick: () => setWeek(w) }, `Semana ${w}`)
       )
     );

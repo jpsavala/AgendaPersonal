@@ -588,8 +588,34 @@ window.Agenda = window.Agenda || {};
         progression: seed ? seed.progression : "",
         routine: seed ? JSON.parse(JSON.stringify(seed.routine)) : {},
         weeks: seed ? JSON.parse(JSON.stringify(seed.weeks)) : {},
+        weekCount: seed && seed.weekCount ? seed.weekCount : 4,
       };
     });
+  }
+
+  // Migración única: reorganización pedida a mano sobre los bloques de
+  // arriba — el Bloque 6 deja de aparecer en el selector de Gimnasio
+  // (hidden: true, ver getVisibleGymBlockNumbers/js/gymView.js), pero su
+  // historial real (20 oct al 16 nov: series/pesos/reps ya registrados)
+  // se conserva intacto en la cuenta, legible igual desde la Diaria/
+  // Semanal para esas fechas (findGymBlockForDate no filtra por hidden).
+  // Además renombra el Bloque 7 a "Bloque SP 1" y el Bloque 8 a "Bloque
+  // S2", ambos con una sola semana (sin pestañas "Semana 2/3/4" vacías
+  // que nunca se van a usar — ver weekCount en getGymBlockMeta/
+  // js/gymView.js). No toca ningún otro bloque.
+  function migrateGymBlockReorg() {
+    if (data.gymBlockReorgApplied) return;
+    data.gymBlockReorgApplied = true;
+    if (!data.gymBlocks) return;
+    if (data.gymBlocks[6]) data.gymBlocks[6].hidden = true;
+    if (data.gymBlocks[7]) {
+      data.gymBlocks[7].label = "Bloque SP 1";
+      data.gymBlocks[7].weekCount = 1;
+    }
+    if (data.gymBlocks[8]) {
+      data.gymBlocks[8].label = "Bloque S2";
+      data.gymBlocks[8].weekCount = 1;
+    }
   }
 
   // Bloque (de data.gymBlocks) al que le corresponde esta fecha, o null
@@ -760,6 +786,16 @@ window.Agenda = window.Agenda || {};
       .sort((a, b) => a - b);
   }
 
+  // Igual que getGymBlockNumbers, pero sin los bloques marcados "hidden"
+  // (ver migrateGymBlockReorg): son los que se ofrecen como pestaña en
+  // el selector de Gimnasio. El resto de la app (Diaria/Semanal, racha,
+  // editar un día pasado) sigue usando getGymBlockNumbers/
+  // findGymBlockForDate tal cual, así que un bloque oculto no pierde su
+  // historial, solo deja de poder elegirse a mano.
+  function getVisibleGymBlockNumbers() {
+    return getGymBlockNumbers().filter((n) => !(data.gymBlocks[n] && data.gymBlocks[n].hidden));
+  }
+
   function getGymBlockMeta(blockNumber) {
     const block = data.gymBlocks && data.gymBlocks[blockNumber];
     if (!block) return null;
@@ -771,6 +807,13 @@ window.Agenda = window.Agenda || {};
       progression: block.progression || "",
       startDate: block.startDate,
       endDate: block.endDate,
+      hidden: !!block.hidden,
+      // Cuántas pestañas "Semana N" mostrar (ver js/gymView.js): 4 de
+      // siempre para los bloques de toda la vida (una ronda por
+      // semana), salvo que el bloque diga explícitamente lo contrario
+      // (ver migrateGymBlockReorg: Bloque SP 1/S2 son una sola ronda,
+      // sin semanas 2-4 vacías que no van a usarse nunca).
+      weekCount: block.weekCount || 4,
     };
   }
 
@@ -1383,6 +1426,7 @@ window.Agenda = window.Agenda || {};
     migrateGymBlocksStructure();
     migrateGymRoutinesSeed();
     migrateGymTaperPlan();
+    migrateGymBlockReorg();
     migratePrioritiesToWeekTrabajo();
     migrateWeekHabitsToDayHabits();
     migrateWeekendRunDoneToBlocks();
@@ -3216,6 +3260,7 @@ window.Agenda = window.Agenda || {};
     isGymUnavailable,
     setGymUnavailable,
     getGymBlockNumbers,
+    getVisibleGymBlockNumbers,
     getGymBlockMeta,
     getGymSessionLocation,
     getGymUiState,

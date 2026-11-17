@@ -68,22 +68,28 @@ function mockDateScript(isoDate) {
   // ninguna de las correcciones puntuales de fechas fijas, para que esta
   // prueba no dependa de ellas): ancla el lunes de esa semana, sin
   // atraso, y marca "Sí" hoy (viernes) con el flujo real de la UI.
+  // Nota: la cola plana "gymQueue" quedó obsoleta cuando se introdujo
+  // data.gymBlocks (Bloque 5/6, ver js/state.js: migrateGymBlocksStructure)
+  // — esa migración ya corrió al cargar la página (gymBlocksMigrated
+  // queda true en el snapshot de getRawData()), así que escribir en
+  // raw.gymQueue directo ya no tiene ningún efecto. El 21-25 de
+  // septiembre cae dentro del Bloque 5 (termina el 19 de oct), así que
+  // hay que sembrar ahí (mismo patrón que tests/gym-queue-hole.test.js).
   await page.evaluate(() => {
     const raw = window.Agenda.state.getRawData();
-    raw.gymQueueCorrectionApplied = true;
-    raw.gymQueueCorrection2Applied = true;
-    raw.gymQueue = {
-      pointer: 0,
-      pointerAtSeed: 0,
-      seedAnchor: "2026-09-21",
-      resolutions: {
-        "2026-09-21": { status: "done", index: 0 },
-        "2026-09-22": { status: "done", index: 1 },
-        "2026-09-23": { status: "done", index: 2 },
-        "2026-09-24": { status: "done", index: 3 },
-      },
-      unavailable: {},
+    const block = raw.gymBlocks && raw.gymBlocks[5];
+    if (!block) throw new Error("Bloque 5 no está sembrado");
+    block.startDate = "2026-09-21";
+    block.seedAnchor = "2026-09-21";
+    block.pointer = 4;
+    block.pointerAtSeed = 0;
+    block.resolutions = {
+      "2026-09-21": { status: "done", index: 0 },
+      "2026-09-22": { status: "done", index: 1 },
+      "2026-09-23": { status: "done", index: 2 },
+      "2026-09-24": { status: "done", index: 3 },
     };
+    block.unavailable = {};
     window.Agenda.state.replaceAllData(raw);
   });
   await page.waitForTimeout(150);
@@ -92,7 +98,13 @@ function mockDateScript(isoDate) {
   await page.locator(".date-picker").fill("2026-09-25");
   await page.locator(".date-picker").dispatchEvent("change");
   await page.waitForTimeout(150);
-  await page.locator(".schedule-block .gym-actions button", { hasText: "Sí" }).first().click();
+  // Ojo: ".gym-actions" es una clase genérica de fila Sí/No reutilizada
+  // también por "¿Habrá paradas antes de la oficina?" y por la corrida
+  // (ver js/dailyView.js) — hay que acotar al bloque "Gimnasio" puntual
+  // (mismo patrón que tests/gym-taper-plan.test.js), si no el primer
+  // ".gym-actions button" de la página puede ser el de otra pregunta.
+  const gymBlock = page.locator(".schedule-block").filter({ has: page.locator(".schedule-label", { hasText: "Gimnasio" }) });
+  await gymBlock.locator(".gym-actions button", { hasText: "Sí" }).first().click();
   await page.waitForTimeout(150);
 
   const rightAfter = await page.evaluate(() => window.Agenda.state.getGymResolution("2026-09-25"));
