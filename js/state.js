@@ -539,6 +539,59 @@ window.Agenda = window.Agenda || {};
     });
   }
 
+  // ---------- Bloques 7 y 8: "Plan Rumbo al 10k" (taper, 17-29 nov 2026) ----------
+  // migrateGymBlocksStructure/migrateGymRoutinesSeed (arriba) ya corrieron
+  // hace rato para esta cuenta (están marcadas como hechas, no vuelven a
+  // tocar nada) — por eso agregar el Bloque 7/8 a BLOCK_SEEDS no alcanza
+  // por sí solo, hace falta esta migración aparte (mismo criterio que
+  // correctDinnerBlock en js/userConfigSync.js) para que de verdad se
+  // cree en la cuenta ya migrada.
+  //
+  // Bloque 6 ya cerraba el 16 de noviembre (GYM_BLOCK_6_END_DATE, de
+  // antes de este plan) — justo un día antes de que arranque el Bloque
+  // 7, así que no hace falta recortarlo. Una sola ronda de 4 sesiones
+  // (sin Cuádriceps: el plan no tiene día de pierna pesada de más esta
+  // semana) y el Bloque 8 aparte, con sus propios 2 días de afinación,
+  // para que cada uno tenga su propia rutina sin pisar la del otro (ver
+  // comentario arriba de BLOCK_7_DAY_NAMES en js/gymRoutines.js).
+  const GYM_BLOCK_7_START_DATE = "2026-11-17";
+  const GYM_BLOCK_7_END_DATE = "2026-11-21";
+  const GYM_BLOCK_7_SESSIONS = ["Torso", "Empuje", "Glúteo/Femoral", "Tracción"];
+  const GYM_BLOCK_8_START_DATE = "2026-11-23";
+  const GYM_BLOCK_8_END_DATE = "2026-11-29";
+  const GYM_BLOCK_8_SESSIONS = ["Torso ligero", "Empuje ligero"];
+
+  function migrateGymTaperPlan() {
+    if (data.gymTaperPlanSeeded) return;
+    data.gymTaperPlanSeeded = true;
+    if (!data.gymBlocks || !ns.gymRoutines) return;
+    const seeds = ns.gymRoutines.BLOCK_SEEDS;
+    [
+      { number: 7, sessions: GYM_BLOCK_7_SESSIONS, startDate: GYM_BLOCK_7_START_DATE, endDate: GYM_BLOCK_7_END_DATE },
+      { number: 8, sessions: GYM_BLOCK_8_SESSIONS, startDate: GYM_BLOCK_8_START_DATE, endDate: GYM_BLOCK_8_END_DATE },
+    ].forEach(({ number, sessions, startDate, endDate }) => {
+      if (data.gymBlocks[number]) return; // ya existe (corrida de nuevo, o agregado a mano): no lo pisa
+      const seed = seeds[number];
+      data.gymBlocks[number] = {
+        number,
+        sessions,
+        startDate,
+        endDate,
+        pointer: 0,
+        pointerAtSeed: 0,
+        seedAnchor: startDate,
+        resolutions: {},
+        unavailable: {},
+        label: seed ? seed.label : `Bloque ${number}`,
+        dayNames: seed ? seed.dayNames : sessions,
+        rules: seed ? seed.rules : "",
+        progression: seed ? seed.progression : "",
+        routine: seed ? JSON.parse(JSON.stringify(seed.routine)) : {},
+        weeks: seed ? JSON.parse(JSON.stringify(seed.weeks)) : {},
+      };
+    });
+  }
+
   // Bloque (de data.gymBlocks) al que le corresponde esta fecha, o null
   // si cae antes/después de todos los rangos conocidos (comportamiento
   // manual, igual que "cola agotada" de siempre).
@@ -1329,6 +1382,7 @@ window.Agenda = window.Agenda || {};
     migrateGymQueueCorrection4();
     migrateGymBlocksStructure();
     migrateGymRoutinesSeed();
+    migrateGymTaperPlan();
     migratePrioritiesToWeekTrabajo();
     migrateWeekHabitsToDayHabits();
     migrateWeekendRunDoneToBlocks();

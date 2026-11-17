@@ -144,8 +144,101 @@ window.Agenda = window.Agenda || {};
     ],
   };
 
+  // ---------- Bloque 7 (17 - 21 nov 2026): taper semana 1 rumbo al 10k ----------
+  // "Plan Rumbo al 10k" (PDF del 17 nov 2026): el usuario viene de una
+  // semana enferma, así que esta semana baja a 80% del peso de la
+  // Semana 3 del Bloque 6 (70% en pierna), 3 series (2 en pierna) y RIR
+  // 3 sin fallo — sin sentadilla/prensa/extensión de cuádriceps en todo
+  // este bloque (el plan no incluye día de pierna pesada de cuádriceps,
+  // solo Glúteo/Femoral liviano). Una sola ronda, no se repite por
+  // semanas como el Bloque 6 (ver migrateGymTaperPlan en js/state.js,
+  // que crea un Bloque 8 aparte para los 2 días de afinación de la
+  // semana siguiente, en vez de una segunda vuelta de este mismo
+  // bloque — así cada "día" de la cola tiene su propia rutina, sin
+  // pisar la de otro).
+  const BLOCK_7_DAY_NAMES = ["Torso", "Empuje", "Glúteo/Femoral", "Tracción"];
+
+  const BLOCK_7_RULES =
+    "Nada a 0 RIR hasta la carrera (domingo 29).\n" +
+    "Pesos: 80% de lo que usaste en la Semana 3 del Bloque 6 (70% en pierna).\n" +
+    "Si algún día amaneces mal, descansa: no se compensa.\n" +
+    "Última pierna pesada de este plan: jueves 19 (Glúteo/Femoral, 70%, 2 series).";
+
+  const BLOCK_7_PROGRESSION =
+    "Semana de descarga antes del 10k: el objetivo es llegar fresco, no ganar más fuerza.\n" +
+    "Sin sentadilla, prensa ni extensión de cuádriceps en este bloque.";
+
+  const BLOCK_7_ROUTINE_RAW = {
+    1: [
+      // Día 1 Torso (martes 17)
+      ex("Press de Pecho (Máquina)", "3 x 8-10, 2 min, 105-110 lb"),
+      ex("Jalón al Pecho (Barra larga)", "3 x 8-10, 2 min, 100-105 lb"),
+      ex("Press de Hombro (Mancuerna)", "3 x 10-12, 1.5 min, 32.5-35 lb/lado"),
+      ex("Remo en Polea (V)", "3 x 10-12, 1.5 min, 105-110 lb"),
+      ex("Tríceps en Polea (Barra)", "3 x 12-15, 1 min, 35-40 lb"),
+      ex("Curl Bíceps Banco Inclinado", "2 x 12-15, 1 min, 16-18 lb/lado"),
+    ],
+    2: [
+      // Día 2 Empuje (miércoles 18, corres 4-5 km suaves)
+      ex("Press Inclinado (Mancuerna)", "3 x 10-12, 2 min, 40-42.5 lb/lado"),
+      ex("Aperturas en Polea", "3 x 12-15, 1 min, 20-25 lb/lado"),
+      ex("Elevación Lateral (Mancuerna)", "3 x 12-15, 1 min, 12.5-15 lb/lado"),
+      ex("Fondos", "3 x 10-12, 1.5 min, peso corporal"),
+      ex("Tríceps Tras Nuca (Polea)", "2 x 12-15, 1 min, 12.5 lb"),
+    ],
+    3: [
+      // Día 3 Glúteo/Femoral (jueves 19, última pierna pesada)
+      ex("Hip Thrust (Máquina)", "2 x 10-12, 2.5 min, 170-175 lb"),
+      ex("Peso Muerto Rumano", "2 x 8-10, 2.5 min, 42.5 lb/lado + barra"),
+      ex("Curl Femoral (Máquina)", "2 x 12-15, 2 min, 110-115 lb"),
+      exSimple("Pantorrilla Sentado", "3 x 15, 45 seg, carga ligera"),
+      ex("Crunch en Máquina", "2 x 12-15, 45 seg, 25 lb"),
+    ],
+    4: [
+      // Día 4 Tracción (viernes 20, corres 3-4 km suaves)
+      ex("Remo con Barra (Prono)", "3 x 10-12, 2 min, 40-45 lb/lado + barra"),
+      ex("Remo Unilateral (Mancuerna)", "3 x 10-12 por lado, 1.5 min, 35-40 lb"),
+      ex("Face Pull", "3 x 15, 1 min, 37.5 lb"),
+      ex("Curl Martillo", "3 x 12-15, 1 min, 20 lb/lado"),
+      ex("Curl Predicador (Barra Z)", "2 x 12-15, 1 min, 32.5-35 lb"),
+    ],
+  };
+
+  // ---------- Bloque 8 (23 - 24 nov 2026): afinación, últimos 2 días de gym ----------
+  // Mismo plan: solo lunes y martes de la semana de la carrera, 2
+  // series muy lejos del fallo, menos ejercicios por día que el Bloque
+  // 7 (el plan los recorta a propósito, no es un descuido) — después
+  // del martes 24 no hay más gym hasta el bloque nuevo que arranca
+  // después del 10k (fuera de este PDF, no seedeado todavía).
+  const BLOCK_8_DAY_NAMES = ["Torso ligero", "Empuje ligero"];
+
+  const BLOCK_8_RULES =
+    "Últimos 2 días de gym antes del 10k: 2 series, muy lejos del fallo.\n" +
+    "Nada a 0 RIR.";
+
+  const BLOCK_8_PROGRESSION =
+    "Después del 10k (domingo 29): descansas unos días y arranca un bloque nuevo de gym con calma, sin presión de peso.";
+
+  const BLOCK_8_ROUTINE_RAW = {
+    1: [
+      // Día 1 Torso ligero (lunes 23)
+      ex("Press de Pecho (Máquina)", "2 x 8-10, 2 min, 105 lb"),
+      ex("Jalón al Pecho (Barra larga)", "2 x 8-10, 2 min, 100 lb"),
+      ex("Press de Hombro (Mancuerna)", "2 x 10-12, 1.5 min, 32.5 lb/lado"),
+      ex("Remo en Polea (V)", "2 x 10-12, 1.5 min, 105 lb"),
+    ],
+    2: [
+      // Día 2 Empuje ligero (martes 24, último gym antes de la carrera)
+      ex("Press Inclinado (Mancuerna)", "2 x 10-12, 2 min, 40 lb/lado"),
+      ex("Aperturas en Polea", "2 x 12-15, 1 min, 20 lb/lado"),
+      ex("Elevación Lateral (Mancuerna)", "2 x 12-15, 1 min, 12.5 lb/lado"),
+    ],
+  };
+
   const BLOCK_5_ROUTINE = withIds(BLOCK_5_ROUTINE_RAW, "b5");
   const BLOCK_6_ROUTINE = withIds(BLOCK_6_ROUTINE_RAW, "b6");
+  const BLOCK_7_ROUTINE = withIds(BLOCK_7_ROUTINE_RAW, "b7");
+  const BLOCK_8_ROUTINE = withIds(BLOCK_8_ROUTINE_RAW, "b8");
 
   // Set simple (series con peso/reps/RIR): valores por defecto, se
   // sobreescriben los que correspondan por entrada.
@@ -430,6 +523,24 @@ window.Agenda = window.Agenda || {};
         rules: BLOCK_6_RULES,
         progression: BLOCK_6_PROGRESSION,
         routine: BLOCK_6_ROUTINE,
+        weeks: {},
+      },
+      7: {
+        number: 7,
+        label: "Bloque 7 (taper)",
+        dayNames: BLOCK_7_DAY_NAMES,
+        rules: BLOCK_7_RULES,
+        progression: BLOCK_7_PROGRESSION,
+        routine: BLOCK_7_ROUTINE,
+        weeks: {},
+      },
+      8: {
+        number: 8,
+        label: "Bloque 8 (afinación)",
+        dayNames: BLOCK_8_DAY_NAMES,
+        rules: BLOCK_8_RULES,
+        progression: BLOCK_8_PROGRESSION,
+        routine: BLOCK_8_ROUTINE,
         weeks: {},
       },
     },

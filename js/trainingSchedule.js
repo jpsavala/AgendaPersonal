@@ -36,10 +36,14 @@ window.Agenda = window.Agenda || {};
     "2026-11-06": "Correr - 5km lento",
     "2026-11-11": "Correr - 5km lento + 4 rectas 20 s",
     "2026-11-13": "Correr - 5km lento",
-    "2026-11-18": "Correr - 4km lento + 4 rectas 20 s",
-    "2026-11-20": "Correr - 4km lento",
-    "2026-11-25": "Correr - 3km lento + 4 rectas 20 s",
-    "2026-11-27": "Correr - 3km muy suave",
+    // "Plan Rumbo al 10k" (17 nov 2026): reemplaza por completo lo que
+    // había de acá en adelante — viene de una semana enferma, así que
+    // baja el volumen y quita las rectas (nada de velocidad hasta la
+    // carrera del domingo 29, ver js/gymRoutines.js: BLOCK_7_RULES).
+    "2026-11-18": "Correr - 4-5km suaves",
+    "2026-11-20": "Correr - 3-4km suaves",
+    "2026-11-25": "Correr - 4km suaves",
+    "2026-11-27": "Correr - 2-3km suaves",
   };
 
   // Bloque de corrida de la vista diaria entre semana (lunes a viernes,
@@ -71,7 +75,11 @@ window.Agenda = window.Agenda || {};
     "2026-11-01": "7.5km lento",
     "2026-11-08": "8.5km lento",
     "2026-11-15": "10km lento (ensayo)",
-    "2026-11-22": "6.5km lento",
+    // "Plan Rumbo al 10k" (17 nov 2026): el 22 pasa de 6.5km a 8km muy
+    // lentos — la última corrida larga antes de la carrera, solo para
+    // confirmar que aguanta, no para probar velocidad (no se recupera
+    // el 8.5km que no se corrió el 8 de nov).
+    "2026-11-22": "8km muy lento (~7:00/km)",
     "2026-11-29": "10km",
   };
 
