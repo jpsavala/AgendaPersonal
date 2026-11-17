@@ -618,6 +618,17 @@ window.Agenda = window.Agenda || {};
     }
   }
 
+  // Migración única aparte (migrateGymBlockReorg de arriba ya corrió
+  // para esta cuenta, así que agregar esto ahí no alcanza — mismo
+  // criterio que migrateGymTaperPlan): mismo trato que el Bloque 6,
+  // ahora también para el Bloque 5 (cerró el 19 de oct). Oculto del
+  // selector, historial intacto.
+  function migrateGymBlock5Hidden() {
+    if (data.gymBlock5HiddenApplied) return;
+    data.gymBlock5HiddenApplied = true;
+    if (data.gymBlocks && data.gymBlocks[5]) data.gymBlocks[5].hidden = true;
+  }
+
   // Bloque (de data.gymBlocks) al que le corresponde esta fecha, o null
   // si cae antes/después de todos los rangos conocidos (comportamiento
   // manual, igual que "cola agotada" de siempre).
@@ -1427,6 +1438,7 @@ window.Agenda = window.Agenda || {};
     migrateGymRoutinesSeed();
     migrateGymTaperPlan();
     migrateGymBlockReorg();
+    migrateGymBlock5Hidden();
     migratePrioritiesToWeekTrabajo();
     migrateWeekHabitsToDayHabits();
     migrateWeekendRunDoneToBlocks();
